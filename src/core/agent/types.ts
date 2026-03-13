@@ -8,8 +8,6 @@ import type { EventEmitter } from "../events/emitter";
 
 /** Agent Loop 的启动参数 */
 export interface AgentLoopStartParams {
-  /** 对应当此会话的 id */
-  sessionId: string;
   /** 使用的 LLM provider */
   provider: LLMProvider;
   /** EventEmitter */
