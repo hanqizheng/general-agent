@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# General Agent
 
-## Getting Started
+A from-scratch AI agent engine built with TypeScript and Next.js. Implements the core agentic loop pattern — LLM reasoning, tool calling, result feedback, repeat — with real-time SSE streaming.
 
-First, run the development server:
+Designed as a **generic foundation** for building vertical AI agents. This project provides the agent runtime, tool system, provider abstraction, and event streaming infrastructure. Domain-specific capabilities are added by downstream projects.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Architecture
+
+```
+User Message → Agent Loop → LLM Call → Tool Execution → Result Feedback → LLM Call → ...
+                                                                                    ↓
+                              ← ← ← ← SSE Event Stream ← ← ← ← ← ← ← ← ← ← ← ←
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The engine is organized into five layers:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Agent Loop** — Multi-turn autonomous execution. Each turn: call the LLM, execute any tool calls, feed results back. Repeats until the LLM has nothing more to do.
+- **Provider Layer** — Unified `LLMProvider` interface. Swap between Anthropic (Claude), Moonshot (Kimi), or any LangChain-compatible model.
+- **Tool System** — Pluggable tools with Zod schema validation. Built-in: file read/write/edit, bash, grep, glob. Easy to extend with custom tools.
+- **Event System** — Structured lifecycle events (session, loop, turn, message, tool) enabling real-time observability.
+- **SSE Streaming** — Batched Server-Sent Events delivering token-level streaming to the client.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Quick Start
 
-## Learn More
+```bash
+git clone git@github.com:hanqizheng/general-agent.git
+cd general-agent
+npm install
+docker compose up -d        # MySQL
+cp .env.local.example .env.local
+# Edit .env.local — add at least one LLM provider API key
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Test with curl:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+curl -N -X POST http://localhost:3891/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "List files in the current directory"}'
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Building Vertical Agents
 
-## Deploy on Vercel
+Fork this repo on GitHub, then clone your fork:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+git clone git@github.com:<you>/general-agent.git my-agent
+cd my-agent
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Add upstream to sync future base updates
+git remote add upstream git@github.com:hanqizheng/general-agent.git
+
+# Sync base updates anytime:
+git fetch upstream && git merge upstream/main
+```
+
+Extension points:
+- **Custom tools** — Implement `ToolDefinition`, register in `ToolRegistry`
+- **Custom providers** — Implement the `LLMProvider` interface
+- **System prompt** — Customize `src/core/prompt/` for your domain
+- **Skills** — Planned skill loading and injection system
+
+## Tech Stack
+
+Next.js 16 (App Router) / TypeScript / LangChain / Zod v4 / MySQL + Drizzle ORM / Web Streams API + SSE / nanoid
+
+## License
+
+MIT

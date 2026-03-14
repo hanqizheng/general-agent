@@ -1,4 +1,4 @@
-// Anthropic provider — Claude via AWS relay (standard Anthropic API format)
+// Anthropic provider — standard Anthropic API format
 
 import { ChatAnthropic } from "@langchain/anthropic";
 import type { AIMessageChunk } from "@langchain/core/messages";
