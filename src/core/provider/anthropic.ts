@@ -79,8 +79,15 @@ function toLangChainTool(tool: LLMToolDefinition) {
 async function* transformStream(
   stream: AsyncIterable<AIMessageChunk>,
 ): AsyncIterable<LLMStreamChunk> {
+  // 累积所有 chunk，用于最终提取完整的 tool calls
+  // LangChain 流式传输 tool call 时参数是增量到达的，单个 chunk 的 args 可能是空对象，
+  // 只有累积后的完整消息才有完整参数
+  let accumulated: AIMessageChunk | null = null;
+
   for await (const chunk of stream) {
-    // 文本内容
+    accumulated = accumulated ? accumulated.concat(chunk) : chunk;
+
+    // 文本 — 实时流式输出
     if (typeof chunk.content === "string" && chunk.content.length > 0) {
       yield { type: "text_delta", text: chunk.content };
     } else if (Array.isArray(chunk.content)) {
@@ -104,27 +111,27 @@ async function* transformStream(
       }
     }
 
-    // Tool 调用
-    if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-      for (const tc of chunk.tool_calls) {
-        if (tc.name && tc.id) {
-          yield {
-            type: "tool_use",
-            id: tc.id,
-            name: tc.name,
-            input: tc.args ?? {},
-          };
-        }
-      }
-    }
-
-    // Token 使用量
+    // Token 使用量 — 实时输出
     if (chunk.usage_metadata) {
       yield {
         type: "usage",
         inputTokens: chunk.usage_metadata.input_tokens,
         outputTokens: chunk.usage_metadata.output_tokens,
       };
+    }
+  }
+
+  // stream 结束后，从累积的完整消息中提取 tool calls（此时 args 完整）
+  if (accumulated?.tool_calls && accumulated.tool_calls.length > 0) {
+    for (const tc of accumulated.tool_calls) {
+      if (tc.name && tc.id) {
+        yield {
+          type: "tool_use",
+          id: tc.id,
+          name: tc.name,
+          input: (tc.args ?? {}) as Record<string, unknown>,
+        };
+      }
     }
   }
 }
