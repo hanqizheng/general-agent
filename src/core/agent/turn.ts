@@ -50,7 +50,7 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
         });
         break;
       case "tool_use":
-        // 先把积累的文本 flush 成一个 content block
+        // 工具调用的chunk处理之前，需要先把积累的文本完成 flush
         if (currentText.length > 0) {
           emitter.emit({
             type: "message.text.done",
@@ -58,21 +58,22 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
             partIndex,
           });
 
-          contentBlocks.push({
-            type: "tool_use",
-            id: chunk.id,
-            name: chunk.name,
-            input: chunk.input,
-          });
-
+          contentBlocks.push({ type: "text", text: currentText });
+          currentText = "";
           partIndex++;
-
-          pendingToolCalls.push({
-            id: chunk.id,
-            name: chunk.name,
-            input: chunk.input,
-          });
         }
+        contentBlocks.push({
+          type: "tool_use",
+          id: chunk.id,
+          name: chunk.name,
+          input: chunk.input,
+        });
+        pendingToolCalls.push({
+          id: chunk.id,
+          name: chunk.name,
+          input: chunk.input,
+        });
+        partIndex++;
         break;
       case "usage":
         // TODO: 这一次实现暂时不设计
@@ -80,8 +81,7 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
     }
   }
 
-  // flush 剩余文本
-  // text flush 逻辑：当收到 tool_use chunk 时，先把之前积累的 text 封装成 block，因为 LLM 可能先说 "让我读一下文件" 再调用 tool
+  // 把最后剩余的文本 flush 掉
   if (currentText.length > 0) {
     emitter.emit({
       type: "message.text.done",
