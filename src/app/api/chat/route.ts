@@ -1,10 +1,11 @@
+import path from 'path';
+
 import { genSessionId } from "@/lib/id";
 import { EventBus } from "@/core/events/bus";
 import { EventEmitter } from "@/core/events/emitter";
 import { SSEBatcher } from "@/core/sse/batcher";
 import { createAnthropicProvider } from "@/core/provider/anthropic";
 import { runAgentLoop } from "@/core/agent/loop";
-import { systemPrompt } from "@/core/prompt/system";
 import { ToolRegistry } from "@/core/tools/registry";
 import { readTool } from "@/core/tools/built-in/read";
 import { writeTool } from "@/core/tools/built-in/write";
@@ -12,6 +13,8 @@ import { editTool } from "@/core/tools/built-in/edit";
 import { bashTool } from "@/core/tools/built-in/bash";
 import { grepTool } from "@/core/tools/built-in/grep";
 import { globTool } from "@/core/tools/built-in/glob";
+import { loadSkills, buildSkillsXml } from "@/core/skills";
+import { buildSystemPrompt } from "@/core/prompt/system";
 
 /**
  *   curl POST /api/chat { message: "你好" }
@@ -64,6 +67,7 @@ export async function POST(req: Request) {
     baseURL: process.env.ANTHROPIC_BASE_URL!,
   });
 
+  // Tool
   const toolRegistry = new ToolRegistry();
   toolRegistry.register(readTool);
   toolRegistry.register(writeTool);
@@ -71,6 +75,12 @@ export async function POST(req: Request) {
   toolRegistry.register(bashTool);
   toolRegistry.register(grepTool);
   toolRegistry.register(globTool);
+
+  // Skill
+  const skillsRoot = path.resolve(process.cwd(), "src/skills");
+  const skills = await loadSkills(skillsRoot);
+  const skillsXml = buildSkillsXml(skills);
+  const systemPrompt = await buildSystemPrompt(skillsXml);
 
   // 启动 Agent Loop， 但不 await，让它在后台运行
   runAgentLoop({
