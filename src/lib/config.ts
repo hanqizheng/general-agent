@@ -8,8 +8,8 @@ const envSchema = z.object({
   // Moonshot
   MOONSHOT_API_KEY: z.string().optional(),
 
-  // Database
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  // TODO: Database url temporarily not required
+  DATABASE_URL: z.string().min(1, "DATABASE_URL is required").optional(),
 
   // Node environment
   NODE_ENV: z

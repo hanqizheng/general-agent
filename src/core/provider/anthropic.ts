@@ -44,7 +44,7 @@ export function createAnthropicProvider(
       });
 
       // 转换消息格式
-      const langChainMessages = toLangChainMessages(messages);
+      const langChainMessages = toLangChainMessages(messages, systemPrompt);
 
       // 构建调用参数
       const callOptions: Record<string, unknown> = {};
@@ -58,7 +58,6 @@ export function createAnthropicProvider(
       // 获取流
       const stream = await llmWithTools.stream(langChainMessages, {
         ...callOptions,
-        metadata: { system: systemPrompt },
       });
 
       return transformStream(stream);

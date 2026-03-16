@@ -4,13 +4,21 @@ import {
   HumanMessage,
   AIMessage,
   ToolMessage,
+  SystemMessage,
 } from "@langchain/core/messages";
 import type { LLMMessage } from "./base";
 
-type LangChainMessage = HumanMessage | AIMessage | ToolMessage;
+type LangChainMessage = HumanMessage | AIMessage | ToolMessage | SystemMessage;
 
-export function toLangChainMessages(messages: LLMMessage[]): LangChainMessage[] {
+export function toLangChainMessages(
+  messages: LLMMessage[],
+  systemPrompt?: string,
+): LangChainMessage[] {
   const result: LangChainMessage[] = [];
+
+  if (systemPrompt) {
+    result.push(new SystemMessage(systemPrompt));
+  }
 
   for (const msg of messages) {
     if (msg.role === "user") {
@@ -33,7 +41,7 @@ export function toLangChainMessages(messages: LLMMessage[]): LangChainMessage[] 
               content: block.content,
               tool_call_id: block.toolCallId,
               status: block.isError ? "error" : "success",
-            })
+            }),
           );
         }
       }
@@ -45,7 +53,11 @@ export function toLangChainMessages(messages: LLMMessage[]): LangChainMessage[] 
     } else if (msg.role === "assistant") {
       // assistant 消息里可能有 text、reasoning、tool_use
       const contentParts: string[] = [];
-      const toolCalls: { id: string; name: string; args: Record<string, unknown> }[] = [];
+      const toolCalls: {
+        id: string;
+        name: string;
+        args: Record<string, unknown>;
+      }[] = [];
 
       for (const block of msg.content) {
         if (block.type === "text") {
@@ -66,7 +78,7 @@ export function toLangChainMessages(messages: LLMMessage[]): LangChainMessage[] 
         new AIMessage({
           content: contentParts.join("\n"),
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-        })
+        }),
       );
     }
   }

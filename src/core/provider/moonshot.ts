@@ -31,7 +31,7 @@ export function createMoonshotProvider(
     async stream(
       params: LLMStreamParams,
     ): Promise<AsyncIterable<LLMStreamChunk>> {
-      const { messages, tools, temperature, maxTokens } = params;
+      const { messages, tools, temperature, maxTokens, systemPrompt } = params;
 
       const llm = new ChatOpenAI({
         apiKey,
@@ -44,7 +44,7 @@ export function createMoonshotProvider(
       });
 
       // system prompt 作为第一条消息注入
-      const langChainMessages = toLangChainMessages(messages);
+      const langChainMessages = toLangChainMessages(messages, systemPrompt);
 
       // 绑定 tools（如果有）
       const llmWithTools =
