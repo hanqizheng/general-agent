@@ -12,11 +12,12 @@ User Message → Agent Loop → LLM Call → Tool Execution → Result Feedback 
                               ← ← ← ← SSE Event Stream ← ← ← ← ← ← ← ← ← ← ← ←
 ```
 
-The engine is organized into five layers:
+The engine is organized into six layers:
 
 - **Agent Loop** — Multi-turn autonomous execution. Each turn: call the LLM, execute any tool calls, feed results back. Repeats until the LLM has nothing more to do.
 - **Provider Layer** — Unified `LLMProvider` interface. Swap between Anthropic (Claude), Moonshot (Kimi), or any LangChain-compatible model.
 - **Tool System** — Pluggable tools with Zod schema validation. Built-in: file read/write/edit, bash, grep, glob. Easy to extend with custom tools.
+- **Skills System** — Convention-based modular capabilities. Skills are markdown files with YAML frontmatter, discovered at startup and lazily loaded by the LLM at runtime via the `read` tool. No custom executor needed — the LLM self-directs using skill instructions.
 - **Event System** — Structured lifecycle events (session, loop, turn, message, tool) enabling real-time observability.
 - **SSE Streaming** — Batched Server-Sent Events delivering token-level streaming to the client.
 
@@ -59,7 +60,47 @@ Extension points:
 - **Custom tools** — Implement `ToolDefinition`, register in `ToolRegistry`
 - **Custom providers** — Implement the `LLMProvider` interface
 - **System prompt** — Customize `src/core/prompt/` for your domain
-- **Skills** — Planned skill loading and injection system
+- **Custom skills** — Add a directory under `src/skills/` with a `SKILL.md` file (see below)
+
+## Skills
+
+Skills are modular capability packages that extend the agent's behavior without code changes. Each skill is a directory under `src/skills/` containing a `SKILL.md` file.
+
+### How it works
+
+1. **Discovery** — At startup, the loader scans `src/skills/**/SKILL.md`, parses YAML frontmatter, and builds a catalog.
+2. **Injection** — The catalog (name, description, file path) is serialized to XML and appended to the system prompt.
+3. **Execution** — When the user's request matches a skill, the LLM reads the full `SKILL.md` via the `read` tool and follows its instructions using the normal tool loop.
+
+No custom executor or plugin API is needed — the LLM self-directs based on skill instructions.
+
+### Creating a skill
+
+Create a directory under `src/skills/` with a `SKILL.md`:
+
+```markdown
+---
+name: my-skill
+description: A brief description of what this skill does
+---
+
+## Instructions
+
+Step-by-step instructions the LLM will follow...
+```
+
+Frontmatter fields:
+- `name` — lowercase alphanumeric with hyphens, 1–64 chars (e.g. `git-commit`)
+- `description` — free text, 1–1024 chars, helps the LLM decide when to activate the skill
+
+Optionally include helper scripts or reference files alongside `SKILL.md`. The instruction body can direct the LLM to read or execute them.
+
+### Built-in skills
+
+| Skill | Description |
+|-------|-------------|
+| `git-commit` | Create well-formatted conventional commits |
+| `file-summary` | Generate project file statistics (counts, lines, per-extension breakdown) |
 
 ## Tech Stack
 
