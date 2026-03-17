@@ -61,6 +61,18 @@ export const LOOP_END_REASON = {
   MAX_TURNS: "max_turns",
 } as const;
 
+/** tool 执行结束态：对应 message.tool.end.state */
+export const TOOL_END_STATE = {
+  COMPLETE: "complete",
+  ERROR: "error",
+} as const;
+
+/** part 收口状态：对应 message.part.end.state */
+export const MESSAGE_PART_END_STATE = {
+  COMPLETE: "complete",
+  ERROR: "error",
+} as const;
+
 /** 工具调用生命周期状态（前端 UI 用） */
 export const TOOL_CALL_STATUS = {
   PENDING: "pending",

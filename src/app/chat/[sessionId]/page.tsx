@@ -1,13 +1,5 @@
-export default async function SessionPage({
-  params,
-}: {
-  params: Promise<{ sessionId: string }>;
-}) {
-  const { sessionId } = await params;
+import { redirect } from "next/navigation";
 
-  return (
-    <div>
-      <h1>Session: {sessionId}</h1>
-    </div>
-  );
+export default async function SessionPage() {
+  redirect("/chat");
 }

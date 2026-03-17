@@ -1,7 +1,10 @@
+import { ChatContainer } from "@/components/chat/chat-container";
+import { ChatProvider } from "@/components/providers/chat-provider";
+
 export default function ChatPage() {
   return (
-    <div>
-      <h1>New Chat</h1>
-    </div>
+    <ChatProvider>
+      <ChatContainer />
+    </ChatProvider>
   );
 }

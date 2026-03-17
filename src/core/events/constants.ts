@@ -1,20 +1,15 @@
 /** 从 lib 层 re-export 共享常量 */
-export { SESSION_STATUS, LOOP_END_REASON } from "@/lib/constants";
+export {
+  SESSION_STATUS,
+  LOOP_END_REASON,
+  TOOL_END_STATE,
+  MESSAGE_PART_END_STATE,
+} from "@/lib/constants";
 
 /** 以下是后端独有的常量 */
 
 /** 单次 Turn 结束原因 */
 export const TURN_END_REASON = {
-  COMPLETE: "complete",
-  ERROR: "error",
-} as const;
-
-export const TOOL_END_STATE = {
-  COMPLETE: "complete",
-  ERROR: "error",
-} as const;
-
-export const MESSAGE_PART_END_STATE = {
   COMPLETE: "complete",
   ERROR: "error",
 } as const;
