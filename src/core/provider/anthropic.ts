@@ -22,7 +22,7 @@ export function createAnthropicProvider(
   const {
     apiKey,
     baseURL,
-    model: defaultModel = "claude-sonnet-4-20250514",
+    model: defaultModel = "claude-opus-4-6-v1",
   } = options;
 
   return {

@@ -15,13 +15,13 @@ const globParams = z.object({
   search_path: z
     .string()
     .optional()
-    .describe("Directory to search in (default: workspace root)"),
+    .describe("Absolute directory path to search in (default: workspace root)"),
 });
 
 export const globTool: ToolDefinition<z.infer<typeof globParams>> = {
   name: "glob",
   description:
-    "Find files matching a glob pattern. Returns file paths relative to the workspace root. Automatically ignores node_modules, .git, dist, and .next directories.",
+    "Find workspace files matching a glob pattern. Returns file paths relative to the workspace root. Use this when you need to locate files before reading or editing them.",
   riskLevel: "low",
   parameters: globParams,
 

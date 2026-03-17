@@ -9,14 +9,16 @@ import { MAX_WRITE_CONTENT_CHARS } from "@/lib/constants";
 import { checkPathSafety } from "../utils";
 
 const writeParams = z.object({
-  file_path: z.string().describe("Absolute path to the file to write"),
+  file_path: z
+    .string()
+    .describe("Absolute path to the file to write inside the workspace root"),
   content: z.string().describe("The content to write to the file"),
 });
 
 export const writeTool: ToolDefinition<z.infer<typeof writeParams>> = {
   name: "write",
   description:
-    "Write content to a file. Creates the file if it does not exist, overwrites if it does. Automatically creates parent directories as needed.",
+    "Write content to a workspace file. Creates the file if it does not exist, overwrites if it does, and automatically creates parent directories as needed.",
   riskLevel: "medium",
   parameters: writeParams,
 

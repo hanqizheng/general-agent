@@ -9,7 +9,9 @@ import {
 } from "@/lib/constants";
 
 const readParams = z.object({
-  file_path: z.string().describe("Absolute path to the file to read"),
+  file_path: z
+    .string()
+    .describe("Absolute path to the file to read inside the workspace root"),
   offset: z
     .number()
     .optional()
@@ -23,7 +25,7 @@ const readParams = z.object({
 export const readTool: ToolDefinition<z.infer<typeof readParams>> = {
   name: "read",
   description:
-    "Read file contents with line numbers. Supports offset and limit for partial reading.",
+    "Read a file inside the workspace and return its contents with line numbers. Use this after locating a file with glob or grep, or when you already know the absolute path.",
   riskLevel: "low",
   parameters: readParams,
 

@@ -28,5 +28,8 @@ export function buildSkillsXml(skills: SkillEntry[]) {
     ].join("\n");
   });
 
-  return `<available-skills>\n${entries.join("\n")}\n</available-skills>`;
+  return [
+    "The following specialized skills are available. They supplement — but do not replace — your general knowledge and tools.",
+    `<available-skills>\n${entries.join("\n")}\n</available-skills>`,
+  ].join("\n");
 }

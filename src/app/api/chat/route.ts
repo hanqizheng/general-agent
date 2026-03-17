@@ -20,6 +20,7 @@ import { buildSystemPrompt } from "@/core/prompt/system";
 export async function POST(req: Request) {
   const body = (await req.json()) as { message?: unknown };
   const { message } = body;
+  const workspaceRoot = process.cwd();
 
   if (!message || typeof message !== "string") {
     return new Response("message is required", { status: 400 });
@@ -53,7 +54,10 @@ export async function POST(req: Request) {
   const skillsRoot = path.resolve(process.cwd(), "src/skills");
   const skills = await loadSkills(skillsRoot);
   const skillsXml = buildSkillsXml(skills);
-  const systemPrompt = await buildSystemPrompt(skillsXml);
+  const systemPrompt = await buildSystemPrompt({
+    skillsXml,
+    workspaceRoot,
+  });
 
   void runAgentLoop({
     emitter,
@@ -61,7 +65,7 @@ export async function POST(req: Request) {
     systemPrompt,
     userMessage: message,
     history: [],
-    toolContext: { workspaceRoot: process.cwd() },
+    toolContext: { workspaceRoot },
     toolRegistry,
   })
     .catch((error: unknown) => {

@@ -24,7 +24,7 @@ const bashParams = z.object({
 export const bashTool: ToolDefinition<z.infer<typeof bashParams>> = {
   name: "bash",
   description:
-    "Execute a shell command and return its output (stdout + stderr). Commands run in the workspace root directory. Use timeout parameter for long-running commands.",
+    "Execute a shell command in the workspace root directory and return its output (stdout + stderr). Prefer this for repo inspection, builds, tests, scripts, git commands, and other terminal operations. Relative paths are resolved from the workspace root.",
   riskLevel: "high",
   parameters: bashParams,
 

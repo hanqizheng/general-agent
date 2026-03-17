@@ -17,7 +17,7 @@ const grepParams = z.object({
   search_path: z
     .string()
     .optional()
-    .describe("Directory or file to search in (default: workspace root)"),
+    .describe("Absolute directory or file path to search in (default: workspace root)"),
   include: z
     .string()
     .optional()
@@ -27,7 +27,7 @@ const grepParams = z.object({
 export const grepTool: ToolDefinition<z.infer<typeof grepParams>> = {
   name: "grep",
   description:
-    "Search file contents using a regex pattern. Returns matching lines with file path and line numbers. Searches recursively within the workspace.",
+    "Search workspace file contents using a regex pattern. Returns matching lines with file path and line numbers. Use this when you know the text to search for but not the exact file.",
   riskLevel: "low",
   parameters: grepParams,
 

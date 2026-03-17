@@ -8,7 +8,9 @@ import type { ToolDefinition } from "../types";
 import { checkPathSafety } from "../utils";
 
 const editParams = z.object({
-  file_path: z.string().describe("Absolute path to the file to edit"),
+  file_path: z
+    .string()
+    .describe("Absolute path to the file to edit inside the workspace root"),
   old_string: z.string().describe("The exact string to find and replace"),
   new_string: z.string().describe("The replacement string"),
   replace_all: z
@@ -20,7 +22,7 @@ const editParams = z.object({
 export const editTool: ToolDefinition<z.infer<typeof editParams>> = {
   name: "edit",
   description:
-    "Replace an exact string in a file. By default errors if the string appears more than once — pass replace_all=true to replace all occurrences. The old_string must match exactly (including whitespace and indentation).",
+    "Replace an exact string in a workspace file. By default errors if the string appears more than once — pass replace_all=true to replace all occurrences. The old_string must match exactly, including whitespace and indentation.",
   riskLevel: "medium",
   parameters: editParams,
 
