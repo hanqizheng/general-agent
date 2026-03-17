@@ -1,105 +1,207 @@
-// Turn execution — single LLM call + tool parsing within one loop iteration
-
-/**
- * Turn 负责一次 LLM 调用，是 loop 的最小执行单元。它做三件事
- * 1. 调用 provider.stream() 获取流
- * 2. 消费流中的每个 chunk，通过 EventEmitter 发射事件
- * 3. 收集完整的 assistant 响应，返回给 loop
- */
-
-import { MESSAGE_ROLE } from "@/lib/constants";
-import { LLMContentBlock } from "../provider/base";
-import type { TurnParams, TurnResult, PendingToolCall } from "./types";
-
+import { MESSAGE_PART_KIND, MESSAGE_ROLE } from "@/lib/constants";
 import { genMessageId } from "@/lib/id";
-import { TOOL_END_STATE } from "../events/constants";
+
+import { MESSAGE_PART_END_STATE, TOOL_END_STATE } from "../events/constants";
+import type {
+  MessagePartEndState,
+  MessagePartKind,
+} from "../events/types";
+import type { LLMContentBlock } from "../provider/base";
+import type { PendingToolCall, TurnParams, TurnResult } from "./types";
+
+type StreamPartKind =
+  | typeof MESSAGE_PART_KIND.TEXT
+  | typeof MESSAGE_PART_KIND.REASONING;
 
 export async function executeTurn(params: TurnParams): Promise<TurnResult> {
   const { emitter, provider, streamParams, toolRegistry, toolContext } = params;
   const msgId = genMessageId();
 
-  // 开始 turn，先 emit 一次消息
   emitter.emit({ type: "message.start", messageId: msgId, role: "assistant" });
 
   const contentBlocks: LLMContentBlock[] = [];
   const pendingToolCalls: PendingToolCall[] = [];
-  let currentText = "";
+
+  let currentPartKind: StreamPartKind | null = null;
+  let currentPartContent = "";
   let partIndex = 0;
 
-  // === Phase 1: 消费 LLM stream ===
-
-  const stream = await provider.stream(streamParams);
-
-  for await (const chunk of stream) {
-    switch (chunk.type) {
-      case "text_delta":
-        currentText += chunk.text;
-        emitter.emit({
-          type: "message.text.delta",
-          messageId: msgId,
-          partIndex,
-          text: chunk.text,
-        });
-        break;
-      case "reasoning_delta":
-        emitter.emit({
-          type: "message.reasoning.delta",
-          messageId: msgId,
-          partIndex,
-          content: chunk.text,
-        });
-        break;
-      case "tool_use":
-        // 工具调用的chunk处理之前，需要先把积累的文本完成 flush
-        if (currentText.length > 0) {
-          emitter.emit({
-            type: "message.text.done",
-            messageId: msgId,
-            partIndex,
-          });
-
-          contentBlocks.push({ type: "text", text: currentText });
-          currentText = "";
-          partIndex++;
-        }
-        contentBlocks.push({
-          type: "tool_use",
-          id: chunk.id,
-          name: chunk.name,
-          input: chunk.input,
-        });
-        pendingToolCalls.push({
-          id: chunk.id,
-          name: chunk.name,
-          input: chunk.input,
-        });
-        partIndex++;
-        break;
-      case "usage":
-        // TODO: 这一次实现暂时不设计
-        break;
-    }
-  }
-
-  // 把最后剩余的文本 flush 掉
-  if (currentText.length > 0) {
+  // 主动通知 UI 一个新的 part 开始了，这样 UI 可以更快地渲染出对应的组件（比如工具调用的组件），而不需要等到第一个 delta 到达时才知道这个 part 的存在
+  const emitPartStart = (kind: MessagePartKind) => {
     emitter.emit({
-      type: "message.text.done",
+      type: "message.part.start",
       messageId: msgId,
       partIndex,
+      kind,
     });
-    contentBlocks.push({ type: "text", text: currentText });
-  }
+  };
 
-  // === Phase 2: 执行 tool 调用 ===
+  const emitPartEnd = (kind: MessagePartKind, state: MessagePartEndState) => {
+    emitter.emit({
+      type: "message.part.end",
+      messageId: msgId,
+      partIndex,
+      kind,
+      state,
+    });
+  };
 
-  const toolResultBlocks: LLMContentBlock[] = [];
+  /**
+   * 仅限 Text 和 Reasoning 的 part 完成 flush
+   * 通知对应的事件 done 并且把对应囤积的 currentPartContent 加入 contentBlocks 中
+   * 因为完成一次具体的 part 所以 partIndex 也会增加
+   */
+  const flushCurrentPart = (
+    state: MessagePartEndState = MESSAGE_PART_END_STATE.COMPLETE,
+  ) => {
+    if (!currentPartKind || currentPartContent.length === 0) {
+      return;
+    }
 
-  if (pendingToolCalls.length > 0 && toolRegistry && toolContext) {
+    if (currentPartKind === MESSAGE_PART_KIND.TEXT) {
+      if (state === MESSAGE_PART_END_STATE.COMPLETE) {
+        emitter.emit({
+          type: "message.text.done",
+          messageId: msgId,
+          partIndex,
+        });
+      }
+
+      contentBlocks.push({
+        type: "text",
+        text: currentPartContent,
+      });
+    } else {
+      if (state === MESSAGE_PART_END_STATE.COMPLETE) {
+        emitter.emit({
+          type: "message.reasoning.done",
+          messageId: msgId,
+          partIndex,
+          text: currentPartContent,
+        });
+      }
+
+      contentBlocks.push({
+        type: "reasoning",
+        text: currentPartContent,
+      });
+    }
+
+    emitPartEnd(currentPartKind, state);
+
+    currentPartKind = null;
+    currentPartContent = "";
+    partIndex += 1;
+  };
+
+  /**
+   * 
+   * - 如果当前没有 part，就创建
+   * - 如果当前 part 类型不同，就先 flush，再创建新 part
+   * - 如果当前 part 类型相同，就继续沿用
+   */
+  const ensureStreamPart = (kind: StreamPartKind) => {
+    if (currentPartKind !== null && currentPartKind !== kind) {
+      flushCurrentPart();
+    }
+
+    if (currentPartKind === null) {
+      emitPartStart(kind);
+      currentPartKind = kind;
+    }
+  };
+
+  // chunk 拼接器
+  const appendToStreamPart = (kind: StreamPartKind, value: string) => {
+    if (!value) {
+      return;
+    }
+
+    ensureStreamPart(kind);
+    currentPartContent += value;
+
+    if (kind === MESSAGE_PART_KIND.TEXT) {
+      emitter.emit({
+        type: "message.text.delta",
+        messageId: msgId,
+        partIndex,
+        text: value,
+      });
+    } else {
+      emitter.emit({
+        type: "message.reasoning.delta",
+        messageId: msgId,
+        partIndex,
+        content: value,
+      });
+    }
+  };
+
+  try {
+    try {
+      const stream = await provider.stream(streamParams);
+
+      for await (const chunk of stream) {
+        switch (chunk.type) {
+          case "text_delta":
+            appendToStreamPart(MESSAGE_PART_KIND.TEXT, chunk.text);
+            break;
+
+          case "reasoning_delta":
+            appendToStreamPart(MESSAGE_PART_KIND.REASONING, chunk.text);
+            break;
+
+          case "tool_use":
+            flushCurrentPart();
+
+            emitPartStart(MESSAGE_PART_KIND.TOOL);
+
+            contentBlocks.push({
+              type: "tool_use",
+              id: chunk.id,
+              name: chunk.name,
+              input: chunk.input,
+            });
+
+            pendingToolCalls.push({
+              id: chunk.id,
+              name: chunk.name,
+              input: chunk.input,
+              partIndex,
+            });
+
+            partIndex += 1;
+            break;
+
+          case "usage":
+            break;
+        }
+      }
+    } catch (error) {
+      flushCurrentPart(MESSAGE_PART_END_STATE.ERROR);
+
+      for (const toolCall of pendingToolCalls) {
+        emitter.emit({
+          type: "message.part.end",
+          messageId: msgId,
+          partIndex: toolCall.partIndex,
+          kind: MESSAGE_PART_KIND.TOOL,
+          state: MESSAGE_PART_END_STATE.ERROR,
+        });
+      }
+
+      throw error;
+    }
+
+    flushCurrentPart();
+
+    const toolResultBlocks: LLMContentBlock[] = [];
+
     for (const toolCall of pendingToolCalls) {
       emitter.emit({
         type: "message.tool.start",
         messageId: msgId,
+        partIndex: toolCall.partIndex,
         toolCallId: toolCall.id,
         toolName: toolCall.name,
         input: toolCall.input,
@@ -107,31 +209,55 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
 
       emitter.emit({
         type: "message.tool.running",
+        messageId: msgId,
+        partIndex: toolCall.partIndex,
         toolCallId: toolCall.id,
       });
 
       const startTime = Date.now();
-      let output: string;
+      let output = "";
       let isError = false;
 
-      try {
-        const tool = toolRegistry.get(toolCall.name);
-        const parsed = tool.parameters.parse(toolCall.input);
-        const result = await tool.execute(parsed, toolContext);
-        output = result.output;
-        isError = result.isError;
-      } catch {
-        output = `Error executing tool ${toolCall.name}`;
+      if (!toolRegistry || !toolContext) {
+        output = "Tool system is not configured.";
         isError = true;
+      } else {
+        try {
+          const tool = toolRegistry.get(toolCall.name);
+          const parsed = tool.parameters.parse(toolCall.input);
+          const result = await tool.execute(parsed, toolContext);
+          output = result.output;
+          isError = result.isError;
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Unknown tool execution error";
+
+          output = `Error executing tool "${toolCall.name}": ${message}`;
+          isError = true;
+        }
       }
 
       emitter.emit({
         type: "message.tool.end",
+        messageId: msgId,
+        partIndex: toolCall.partIndex,
         toolCallId: toolCall.id,
         output,
         error: isError ? output : undefined,
         durationMs: Date.now() - startTime,
         state: isError ? TOOL_END_STATE.ERROR : TOOL_END_STATE.COMPLETE,
+      });
+
+      emitter.emit({
+        type: "message.part.end",
+        messageId: msgId,
+        partIndex: toolCall.partIndex,
+        kind: MESSAGE_PART_KIND.TOOL,
+        state: isError
+          ? MESSAGE_PART_END_STATE.ERROR
+          : MESSAGE_PART_END_STATE.COMPLETE,
       });
 
       toolResultBlocks.push({
@@ -141,20 +267,22 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
         isError,
       });
     }
+
+    return {
+      assistantMessage: {
+        role: MESSAGE_ROLE.ASSISTANT,
+        content: contentBlocks,
+      },
+      hasToolCalls: pendingToolCalls.length > 0,
+      toolResultMessage:
+        pendingToolCalls.length > 0
+          ? {
+              role: MESSAGE_ROLE.USER,
+              content: toolResultBlocks,
+            }
+          : undefined,
+    };
+  } finally {
+    emitter.emit({ type: "message.end", messageId: msgId });
   }
-
-  // 本轮 turn 结束
-  emitter.emit({ type: "message.end", messageId: msgId });
-
-  return {
-    assistantMessage: {
-      role: MESSAGE_ROLE.ASSISTANT,
-      content: contentBlocks,
-    },
-    hasToolCalls: pendingToolCalls.length > 0,
-    toolResultMessage:
-      pendingToolCalls.length > 0
-        ? { role: MESSAGE_ROLE.USER, content: toolResultBlocks }
-        : undefined,
-  };
 }

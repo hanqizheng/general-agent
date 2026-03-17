@@ -1,5 +1,3 @@
-// Agent loop — core while loop driving autonomous decision-making
-
 import { DEFAULT_MAX_TURNS } from "@/lib/constants";
 import { buildContext } from "./context";
 import { AgentLoopResult, AgentLoopStartParams } from "./types";
@@ -34,7 +32,6 @@ export async function runAgentLoop(
 
   let endReason: LoopEndReason = LOOP_END_REASON.COMPLETE;
 
-  // 构建 LLM tools 定义
   const tools = toolRegistry?.toLLMToolDefinitions();
 
   emitter.emit({ type: "loop.start" });
@@ -80,8 +77,21 @@ export async function runAgentLoop(
         endReason = LOOP_END_REASON.COMPLETE;
         break;
       }
-    } catch {
+    } catch (error: unknown) {
       emitter.emit({ type: "turn.end", turnId, reason: TURN_END_REASON.ERROR });
+
+      emitter.emit({
+        type: "session.error",
+        error: {
+          code: "TURN_EXECUTION_ERROR",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unknown turn execution error",
+          recoverable: false,
+        },
+      });
+
       endReason = LOOP_END_REASON.ERROR;
       break;
     }

@@ -36,3 +36,35 @@ export const MESSAGE_ROLE = {
   ASSISTANT: "assistant",
   SYSTEM: "system",
 } as const;
+
+/** assistant message 内部 part 的种类 */
+export const MESSAGE_PART_KIND = {
+  TEXT: "text",
+  REASONING: "reasoning",
+  TOOL: "tool",
+} as const;
+
+// ─── 共享状态常量（前后端都会用到）──────────────
+
+/** session 状态 */
+export const SESSION_STATUS = {
+  IDLE: "idle",
+  BUSY: "busy",
+  ERROR: "error",
+} as const;
+
+/** Agent Loop 结束原因 */
+export const LOOP_END_REASON = {
+  COMPLETE: "complete",
+  INTERRUPTED: "interrupted",
+  ERROR: "error",
+  MAX_TURNS: "max_turns",
+} as const;
+
+/** 工具调用生命周期状态（前端 UI 用） */
+export const TOOL_CALL_STATUS = {
+  PENDING: "pending",
+  RUNNING: "running",
+  DONE: "done",
+  ERROR: "error",
+} as const;
