@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useEffect } from "react";
 
-import { MESSAGE_ROLE } from "@/lib/constants";
 import type {
   ChatAction,
   LoopEndReason,
@@ -11,71 +10,70 @@ import type {
   SessionStatus,
   ToolEndState,
 } from "@/lib/chat-types";
+import { MESSAGE_ROLE } from "@/lib/constants";
 
-interface UseAgentSSEOptions {
+interface UseSessionEventsOptions {
+  sessionId: string;
   dispatch: React.Dispatch<ChatAction>;
+  onReconnect: () => Promise<void>;
 }
 
-export function useAgentSSE({ dispatch }: UseAgentSSEOptions) {
-  const abortRef = useRef<AbortController | null>(null);
+export function useSessionEvents({
+  sessionId,
+  dispatch,
+  onReconnect,
+}: UseSessionEventsOptions) {
+  useEffect(() => {
+    const controller = new AbortController();
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closedByCleanup = false;
 
-  const send = useCallback(
-    async (message: string) => {
-      abortRef.current?.abort();
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-
+    const connect = async () => {
       try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message }),
+        const response = await fetch(`/api/sessions/${sessionId}/events`, {
+          cache: "no-store",
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => "");
-          dispatch({
-            type: "session_error",
-            error: errorText || `Request failed: ${response.status}`,
-          });
-          return;
-        }
-
-        if (!response.body) {
-          dispatch({
-            type: "session_error",
-            error: "Response body is empty",
-          });
-          return;
+        if (!response.ok || !response.body) {
+          throw new Error(`Event stream failed: ${response.status}`);
         }
 
         await readSSEStream(response.body, dispatch);
+
+        if (!closedByCleanup) {
+          await onReconnect();
+          reconnectTimer = setTimeout(() => {
+            void connect();
+          }, 750);
+        }
       } catch (error: unknown) {
-        if (error instanceof Error && error.name === "AbortError") {
+        if (controller.signal.aborted) {
           return;
         }
 
         dispatch({
           type: "session_error",
-          error: error instanceof Error ? error.message : "Unknown Error",
+          error:
+            error instanceof Error ? error.message : "Failed to connect stream",
         });
-      } finally {
-        if (abortRef.current === controller) {
-          abortRef.current = null;
-        }
+        await onReconnect().catch(() => undefined);
+        reconnectTimer = setTimeout(() => {
+          void connect();
+        }, 1_000);
       }
-    },
-    [dispatch],
-  );
+    };
 
-  const abort = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-  }, []);
+    void connect();
 
-  return { send, abort };
+    return () => {
+      closedByCleanup = true;
+      controller.abort();
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+    };
+  }, [dispatch, onReconnect, sessionId]);
 }
 
 async function readSSEStream(
@@ -95,17 +93,15 @@ async function readSSEStream(
       }
 
       buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() ?? "";
 
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop() || "";
-
-      for (const part of parts) {
-        if (!part.trim()) {
+      for (const chunk of chunks) {
+        if (!chunk.trim()) {
           continue;
         }
 
-        const parsed = parseSSEEvent(part);
-
+        const parsed = parseSSEEvent(chunk);
         if (parsed) {
           dispatchSSEEvent(parsed, dispatch);
         }
@@ -276,6 +272,9 @@ function dispatchSSEEvent(
         error: data.error as string | undefined,
         durationMs: data.durationMs as number,
       });
+      break;
+
+    default:
       break;
   }
 }

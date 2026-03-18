@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 
-// GET /api/sessions — list sessions
+import {
+  createSession,
+  listSessionSummaries,
+} from "@/db/repositories/session-repository";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET() {
-  return NextResponse.json({ sessions: [] });
+  const sessions = await listSessionSummaries();
+  return NextResponse.json({ sessions });
 }
 
-// POST /api/sessions — create session
 export async function POST() {
-  return NextResponse.json({ message: "not implemented" }, { status: 501 });
+  const session = await createSession(process.cwd());
+  return NextResponse.json({ session }, { status: 201 });
 }

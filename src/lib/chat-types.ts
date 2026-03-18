@@ -83,6 +83,19 @@ export interface ChatState {
 }
 
 export type ChatAction =
+  | {
+      type: "hydrate_session";
+      sessionId: string;
+      status: SessionStatus;
+    }
+  | {
+      type: "hydrate_messages";
+      messages: UIMessage[];
+    }
+  | {
+      type: "prepend_history_page";
+      messages: UIMessage[];
+    }
   | { type: "user_message"; messageId: string; text: string }
   | { type: "session_status"; sessionId: string; status: SessionStatus }
   | { type: "session_error"; error: string }

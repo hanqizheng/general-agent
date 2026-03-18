@@ -36,11 +36,12 @@ export function Header({
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-stone-950">
-              Chat UI for the agent event stream
+              Session-backed runtime console
             </h1>
             <p className="mt-1 text-sm leading-6 text-stone-600">
-              Assistant messages are rendered as ordered parts so the UI can
-              preserve reasoning, text, and tool boundaries.
+              Hydrated transcript history and live streaming share the same
+              session state now, so refresh and recovery no longer reset the
+              conversation.
             </p>
           </div>
         </div>
@@ -51,7 +52,7 @@ export function Header({
               Session
             </div>
             <div className="mt-1 font-mono text-xs text-stone-800">
-              {sessionId ?? "ephemeral"}
+              {sessionId ?? "loading"}
             </div>
           </div>
 

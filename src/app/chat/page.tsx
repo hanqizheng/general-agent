@@ -1,10 +1,19 @@
-import { ChatContainer } from "@/components/chat/chat-container";
-import { ChatProvider } from "@/components/providers/chat-provider";
+import { redirect } from "next/navigation";
 
-export default function ChatPage() {
-  return (
-    <ChatProvider>
-      <ChatContainer />
-    </ChatProvider>
-  );
+import {
+  createSession,
+  findLatestSession,
+} from "@/db/repositories/session-repository";
+
+export const dynamic = "force-dynamic";
+
+export default async function ChatPage() {
+  const latestSession = await findLatestSession();
+
+  if (latestSession) {
+    redirect(`/chat/${latestSession.id}`);
+  }
+
+  const session = await createSession(process.cwd());
+  redirect(`/chat/${session.id}`);
 }

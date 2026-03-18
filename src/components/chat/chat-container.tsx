@@ -8,7 +8,7 @@ import { InputArea } from "./input-area";
 import { MessageList } from "./message-list";
 
 export function ChatContainer() {
-  const { state, sendMessage } = useChat();
+  const { state, sendMessage, loadOlder, hasMore, isLoadingMore } = useChat();
 
   const messageCount = state.messages.length;
   const partCount = state.messages.reduce(
@@ -49,14 +49,17 @@ export function ChatContainer() {
           ) : null}
 
           <div className="min-h-0 flex-1 px-4 pb-4 pt-4 lg:px-6">
-            <MessageList messages={state.messages} status={state.status} />
+            <MessageList
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
+              messages={state.messages}
+              onLoadOlder={loadOlder}
+              status={state.status}
+            />
           </div>
 
           <div className="border-t border-stone-900/8 px-4 py-4 lg:px-6">
-            <InputArea
-              busy={state.status === "busy"}
-              onSend={sendMessage}
-            />
+            <InputArea busy={state.status === "busy"} onSend={sendMessage} />
           </div>
         </section>
       </div>

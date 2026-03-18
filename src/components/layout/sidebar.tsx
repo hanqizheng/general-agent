@@ -41,9 +41,9 @@ export function Sidebar({
             Session observer
           </h2>
           <p className="mt-2 text-sm leading-7 text-stone-600">
-            This shell is optimized for learning. It exposes how one assistant
-            message is decomposed into ordered parts instead of flattening tool
-            calls into a side channel.
+            This view now hydrates from persisted transcript state first, then
+            layers live agent events on top. Session, message, and part order
+            all come from the same DB-backed model.
           </p>
         </div>
 
@@ -74,7 +74,7 @@ export function Sidebar({
           State Model
         </div>
         <pre className="mt-3 overflow-auto font-mono text-xs leading-6 text-stone-200">
-{`Session
+          {`Session
 └─ Message[]
    └─ Part[]
       ├─ reasoning
@@ -85,12 +85,12 @@ export function Sidebar({
 
       <div className="mt-6 space-y-3 rounded-[24px] border border-stone-900/8 bg-white/80 px-4 py-4">
         <div className="text-[11px] uppercase tracking-[0.2em] text-stone-500">
-          Current Constraints
+          Runtime Notes
         </div>
         <div className="text-sm leading-7 text-stone-600">
-          Session persistence and historical route replay still depend on the
-          later DB milestone. Right now the UI focuses on one live in-memory
-          session and accurate part ordering from SSE events.
+          One session can run only one active agent loop at a time. Refreshing
+          the page rehydrates from persisted messages instead of resetting the
+          conversation.
         </div>
       </div>
 

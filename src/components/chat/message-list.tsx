@@ -7,11 +7,20 @@ import type { SessionStatus, UIMessage } from "@/lib/chat-types";
 import { MessageItem } from "./message-item";
 
 interface MessageListProps {
+  hasMore: boolean;
+  isLoadingMore: boolean;
   messages: UIMessage[];
+  onLoadOlder: () => void | Promise<void>;
   status: SessionStatus;
 }
 
-export function MessageList({ messages, status }: MessageListProps) {
+export function MessageList({
+  hasMore,
+  isLoadingMore,
+  messages,
+  onLoadOlder,
+  status,
+}: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const [stickToBottom, setStickToBottom] = useState(true);
@@ -114,6 +123,21 @@ export function MessageList({ messages, status }: MessageListProps) {
         ref={scrollRef}
       >
         <div className="space-y-6 pb-10">
+          {hasMore ? (
+            <div className="flex justify-center">
+              <button
+                className="rounded-full border border-stone-900/10 bg-white/92 px-4 py-2 text-xs font-medium text-stone-700 shadow-[0_14px_30px_rgba(48,36,22,0.08)] transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isLoadingMore}
+                onClick={() => {
+                  void onLoadOlder();
+                }}
+                type="button"
+              >
+                {isLoadingMore ? "Loading history..." : "Load older messages"}
+              </button>
+            </div>
+          ) : null}
+
           {messages.map((message) => (
             <MessageItem key={message.messageId} message={message} />
           ))}

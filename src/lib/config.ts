@@ -34,8 +34,10 @@ const envSchema = z.object({
   OUTBOUND_ALLOW_DIRECT_FALLBACK: envBoolean.optional(),
   OUTBOUND_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
 
-  // TODO: Database url temporarily not required
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required").optional(),
+  // Database
+  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  SESSION_STALE_RUN_MS: z.coerce.number().int().positive().optional(),
+  ARTIFACTS_DIR: z.string().min(1).optional(),
 
   // Node environment
   NODE_ENV: z

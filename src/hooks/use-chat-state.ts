@@ -223,6 +223,33 @@ function updateExistingMessage(
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
+    case "hydrate_session":
+      return {
+        ...state,
+        sessionId: action.sessionId,
+        status: action.status,
+        error: null,
+      };
+
+    case "hydrate_messages":
+      return {
+        ...state,
+        messages: action.messages,
+      };
+
+    case "prepend_history_page": {
+      const seen = new Set(state.messages.map((message) => message.messageId));
+      const nextMessages = [
+        ...action.messages.filter((message) => !seen.has(message.messageId)),
+        ...state.messages,
+      ];
+
+      return {
+        ...state,
+        messages: nextMessages,
+      };
+    }
+
     case "user_message":
       return {
         ...state,
@@ -392,7 +419,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
   }
 }
 
-export function useChatState() {
-  const [state, dispatch] = useReducer(chatReducer, initialState);
+export function useChatState(seedState: ChatState = initialState) {
+  const [state, dispatch] = useReducer(chatReducer, seedState);
   return { state, dispatch };
 }

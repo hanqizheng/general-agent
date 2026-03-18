@@ -18,13 +18,13 @@ async function main() {
     systemPrompt: "You are a helpful assistant.",
   });
 
-  let fullText = "";
   for await (const chunk of stream) {
     if (chunk.type === "text_delta") {
       process.stdout.write(chunk.text);
-      fullText += chunk.text;
     } else if (chunk.type === "usage") {
-      console.log(`\n\n[Usage] input: ${chunk.inputTokens}, output: ${chunk.outputTokens}`);
+      console.log(
+        `\n\n[Usage] input: ${chunk.inputTokens}, output: ${chunk.outputTokens}`,
+      );
     }
   }
 
