@@ -13,6 +13,7 @@ import { editTool } from "@/core/tools/built-in/edit";
 import { bashTool } from "@/core/tools/built-in/bash";
 import { grepTool } from "@/core/tools/built-in/grep";
 import { globTool } from "@/core/tools/built-in/glob";
+import { createWebSearchTool } from "@/core/tools/built-in/web-search";
 import { loadSkills, buildSkillsXml } from "@/core/skills";
 import { buildSystemPrompt } from "@/core/prompt/system";
 
@@ -50,6 +51,13 @@ export async function POST(req: Request) {
   toolRegistry.register(bashTool);
   toolRegistry.register(grepTool);
   toolRegistry.register(globTool);
+
+  if (process.env.GEMINI_API_KEY) {
+    const webSearchTool = createWebSearchTool({
+      apiKey: process.env.GEMINI_API_KEY,
+    });
+    toolRegistry.register(webSearchTool);
+  }
 
   const skillsRoot = path.resolve(process.cwd(), "src/skills");
   const skills = await loadSkills(skillsRoot);

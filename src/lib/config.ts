@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+const envBoolean = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return value;
+}, z.boolean());
+
 const envSchema = z.object({
   // Anthropic (via AWS)
   ANTHROPIC_AUTH_TOKEN: z.string().optional(),
@@ -7,6 +23,16 @@ const envSchema = z.object({
 
   // Moonshot
   MOONSHOT_API_KEY: z.string().optional(),
+
+  // Gemini (Google AI Studio) — for web search grounding
+  GEMINI_API_KEY: z.string().optional(),
+
+  // Optional outbound HTTP policy for web-capable tools
+  OUTBOUND_HTTP_MODE: z.enum(["auto", "direct", "proxy"]).optional(),
+  OUTBOUND_PROXY_URL: z.string().url().optional(),
+  OUTBOUND_NO_PROXY: z.string().optional(),
+  OUTBOUND_ALLOW_DIRECT_FALLBACK: envBoolean.optional(),
+  OUTBOUND_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
 
   // TODO: Database url temporarily not required
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required").optional(),

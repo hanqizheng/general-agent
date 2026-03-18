@@ -41,6 +41,18 @@ curl -N -X POST http://localhost:3891/api/chat \
   -d '{"message": "List files in the current directory"}'
 ```
 
+## Outbound Web Access
+
+Web-capable tools such as `web_search` now use a shared outbound HTTP layer instead of embedding proxy logic in each tool.
+
+- Default behavior is `auto`: use direct egress unless a proxy is configured.
+- You can force `direct` or `proxy` mode with `OUTBOUND_HTTP_MODE`.
+- `OUTBOUND_PROXY_URL` overrides standard `HTTPS_PROXY` / `HTTP_PROXY`.
+- `OUTBOUND_NO_PROXY` overrides standard `NO_PROXY`.
+- `OUTBOUND_ALLOW_DIRECT_FALLBACK=true` lets `auto` mode retry direct when a proxy connection fails.
+
+This keeps tool code deployment-agnostic: overseas servers can stay on direct egress, while constrained environments can opt into a proxy without changing tool implementations.
+
 ## Building Vertical Agents
 
 Fork this repo on GitHub, then clone your fork:
