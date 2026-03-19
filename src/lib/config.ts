@@ -26,6 +26,8 @@ const envSchema = z.object({
 
   // Gemini (Google AI Studio) — for web search grounding
   GEMINI_API_KEY: z.string().optional(),
+  WEB_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  WEB_SEARCH_MAX_RETRIES: z.coerce.number().int().nonnegative().optional(),
 
   // Optional outbound HTTP policy for web-capable tools
   OUTBOUND_HTTP_MODE: z.enum(["auto", "direct", "proxy"]).optional(),

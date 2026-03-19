@@ -3,7 +3,21 @@
 import type { UIToolPart } from "@/lib/chat-types";
 import { TOOL_CALL_STATUS } from "@/lib/constants";
 
-function truncate(value: string, maxLength = 140) {
+const INPUT_SUMMARY_PRIORITY = [
+  "query",
+  "command",
+  "file_path",
+  "filePath",
+  "path",
+  "url",
+  "pattern",
+  "prompt",
+  "message",
+  "content",
+  "name",
+] as const;
+
+function truncate(value: string, maxLength = 220) {
   return value.length > maxLength
     ? `${value.slice(0, maxLength - 3).trimEnd()}...`
     : value;
@@ -36,7 +50,7 @@ function humanizeToken(value: string) {
 
 function formatScalar(value: unknown) {
   if (typeof value === "string") {
-    const normalized = previewText(value, 96);
+    const normalized = previewText(value, 180);
     return normalized ? `"${normalized}"` : null;
   }
 
@@ -60,12 +74,23 @@ function formatScalar(value: unknown) {
   return null;
 }
 
+function getInputPriority(key: string) {
+  const index = INPUT_SUMMARY_PRIORITY.indexOf(
+    key as (typeof INPUT_SUMMARY_PRIORITY)[number],
+  );
+
+  return index === -1 ? INPUT_SUMMARY_PRIORITY.length : index;
+}
+
 function summarizeInput(input: Record<string, unknown> | null) {
   if (!input) {
     return null;
   }
 
-  const entries = Object.entries(input);
+  const entries = Object.entries(input).sort(
+    ([leftKey], [rightKey]) => getInputPriority(leftKey) - getInputPriority(rightKey),
+  );
+
   if (entries.length === 0) {
     return null;
   }
@@ -111,7 +136,6 @@ function fallbackSummary(status: UIToolPart["status"]) {
 export interface ToolPresentation {
   toolLabel: string;
   actionLabel: string;
-  summaryLabel: string;
   meta: string[];
 }
 
@@ -127,15 +151,6 @@ export function getToolPresentation(part: UIToolPart): ToolPresentation {
     outputSummary ??
     fallbackSummary(part.status);
 
-  const summaryLabel =
-    part.status === TOOL_CALL_STATUS.ERROR
-      ? outputSummary ?? "Execution failed"
-      : part.status === TOOL_CALL_STATUS.INTERRUPTED
-        ? "Stopped before completion"
-        : part.status === TOOL_CALL_STATUS.RUNNING
-          ? updateSummary ?? "Working through the request"
-          : outputSummary ?? updateSummary ?? "No additional details";
-
   const meta: string[] = [];
 
   if (part.durationMs !== undefined) {
@@ -146,14 +161,9 @@ export function getToolPresentation(part: UIToolPart): ToolPresentation {
     meta.push(`${part.updates.length} update${part.updates.length === 1 ? "" : "s"}`);
   }
 
-  if (part.state) {
-    meta.push(part.state);
-  }
-
   return {
     toolLabel,
     actionLabel,
-    summaryLabel,
     meta,
   };
 }

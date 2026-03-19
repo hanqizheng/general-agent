@@ -85,6 +85,28 @@ function getErrorCode(error: Error) {
     : undefined;
 }
 
+export function isRetryableNetworkError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  const code = getErrorCode(error);
+
+  if (error.name === "TimeoutError") {
+    return true;
+  }
+
+  if (error.name === "AbortError" && message.includes("timeout")) {
+    return true;
+  }
+
+  return (
+    message.includes("timeout") ||
+    !!(code && RETRYABLE_NETWORK_CODES.has(code))
+  );
+}
+
 function sanitizeProxyUrl(proxyUrl: string) {
   try {
     const url = new URL(proxyUrl);
@@ -235,8 +257,7 @@ function shouldAttemptDirectFallback(
     return false;
   }
 
-  const code = getErrorCode(error);
-  return error.name === "TimeoutError" || !!(code && RETRYABLE_NETWORK_CODES.has(code));
+  return isRetryableNetworkError(error);
 }
 
 function buildSignal(timeoutMs: number, signal?: AbortSignal) {

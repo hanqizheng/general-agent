@@ -22,6 +22,12 @@ export function createDefaultToolRegistry() {
     toolRegistry.register(
       createWebSearchTool({
         apiKey: env.GEMINI_API_KEY,
+        ...(env.WEB_SEARCH_TIMEOUT_MS
+          ? { timeoutMs: env.WEB_SEARCH_TIMEOUT_MS }
+          : {}),
+        ...(env.WEB_SEARCH_MAX_RETRIES !== undefined
+          ? { maxRetries: env.WEB_SEARCH_MAX_RETRIES }
+          : {}),
       }),
     );
   }
