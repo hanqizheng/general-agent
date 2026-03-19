@@ -111,8 +111,8 @@ Optionally include helper scripts or reference files alongside `SKILL.md`. The i
 
 | Skill | Description |
 |-------|-------------|
-| `git-commit` | Create well-formatted conventional commits |
 | `file-summary` | Generate project file statistics (counts, lines, per-extension breakdown) |
+| `web-research` | Improve time-sensitive web search workflows for latest news, weather, and relative-time queries |
 
 ## Tech Stack
 
