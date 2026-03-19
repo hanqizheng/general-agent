@@ -81,6 +81,38 @@ export class DoomLoopError extends AppError {
   }
 }
 
+export class InterruptedError extends AppError {
+  constructor(message = "Operation interrupted by user") {
+    super(message, "INTERRUPTED", 499, false);
+    this.name = "InterruptedError";
+  }
+}
+
+export function isAbortError(error: unknown): boolean {
+  if (error instanceof InterruptedError) {
+    return true;
+  }
+
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (error.name === "AbortError") {
+    return true;
+  }
+
+  const errorWithCode = error as Error & { code?: string; cause?: unknown };
+  if (errorWithCode.code === "ABORT_ERR") {
+    return true;
+  }
+
+  return errorWithCode.cause ? isAbortError(errorWithCode.cause) : false;
+}
+
 export function isRetryable(error: unknown): boolean {
   if (error instanceof AppError) {
     return error.recoverable;

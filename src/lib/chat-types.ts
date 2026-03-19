@@ -3,10 +3,12 @@ import {
   MESSAGE_PART_END_STATE,
   MESSAGE_PART_KIND,
   MESSAGE_ROLE,
+  MESSAGE_STATUS,
   SESSION_STATUS,
   TOOL_CALL_STATUS,
   TOOL_END_STATE,
 } from "./constants";
+import { CHAT_ACTION_TYPE, CHAT_TRANSPORT_STATUS } from "./chat-constants";
 
 export type SessionStatus =
   (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
@@ -24,6 +26,14 @@ export type ToolCallStatus =
   (typeof TOOL_CALL_STATUS)[keyof typeof TOOL_CALL_STATUS];
 
 export type ToolEndState = (typeof TOOL_END_STATE)[keyof typeof TOOL_END_STATE];
+
+export type MessageStatus =
+  (typeof MESSAGE_STATUS)[keyof typeof MESSAGE_STATUS];
+
+export type TransportStatus =
+  (typeof CHAT_TRANSPORT_STATUS)[keyof typeof CHAT_TRANSPORT_STATUS];
+
+export type UIMessageStatus = MessageStatus;
 
 /**
  * UI 消息只有 user 和 assistant 两种角色。
@@ -71,66 +81,83 @@ export interface UIMessage {
   role: UIMessageRole;
   parts: UIMessagePart[];
   isStreaming: boolean;
+  status: UIMessageStatus;
 }
 
 export interface ChatState {
   sessionId: string | null;
   messages: UIMessage[];
   status: SessionStatus;
-  error: string | null;
+  requestError: string | null;
+  transportError: string | null;
+  transportStatus: TransportStatus;
   currentTurnIndex: number;
   loopEndReason: LoopEndReason | null;
 }
 
 export type ChatAction =
   | {
-      type: "hydrate_session";
+      type: typeof CHAT_ACTION_TYPE.HYDRATE_SESSION;
       sessionId: string;
       status: SessionStatus;
     }
   | {
-      type: "hydrate_messages";
+      type: typeof CHAT_ACTION_TYPE.HYDRATE_MESSAGES;
       messages: UIMessage[];
     }
   | {
-      type: "prepend_history_page";
+      type: typeof CHAT_ACTION_TYPE.PREPEND_HISTORY_PAGE;
       messages: UIMessage[];
     }
-  | { type: "user_message"; messageId: string; text: string }
-  | { type: "session_status"; sessionId: string; status: SessionStatus }
-  | { type: "session_error"; error: string }
-  | { type: "loop_start" }
-  | { type: "loop_end"; reason: LoopEndReason }
-  | { type: "turn_start"; turnId: string }
-  | { type: "message_start"; messageId: string }
-  | { type: "message_end"; messageId: string }
   | {
-      type: "part_start";
+      type: typeof CHAT_ACTION_TYPE.USER_MESSAGE;
+      messageId: string;
+      text: string;
+    }
+  | {
+      type: typeof CHAT_ACTION_TYPE.SESSION_STATUS;
+      sessionId: string;
+      status: SessionStatus;
+    }
+  | { type: typeof CHAT_ACTION_TYPE.REQUEST_ERROR; error: string }
+  | { type: typeof CHAT_ACTION_TYPE.CLEAR_REQUEST_ERROR }
+  | {
+      type: typeof CHAT_ACTION_TYPE.TRANSPORT_STATUS;
+      status: TransportStatus;
+      error?: string | null;
+    }
+  | { type: typeof CHAT_ACTION_TYPE.LOOP_START }
+  | { type: typeof CHAT_ACTION_TYPE.LOOP_END; reason: LoopEndReason }
+  | { type: typeof CHAT_ACTION_TYPE.TURN_START; turnId: string }
+  | { type: typeof CHAT_ACTION_TYPE.MESSAGE_START; messageId: string }
+  | { type: typeof CHAT_ACTION_TYPE.MESSAGE_END; messageId: string }
+  | {
+      type: typeof CHAT_ACTION_TYPE.PART_START;
       messageId: string;
       partIndex: number;
       kind: MessagePartKind;
     }
   | {
-      type: "part_end";
+      type: typeof CHAT_ACTION_TYPE.PART_END;
       messageId: string;
       partIndex: number;
       kind: MessagePartKind;
       state: MessagePartEndState;
     }
   | {
-      type: "text_delta";
+      type: typeof CHAT_ACTION_TYPE.TEXT_DELTA;
       messageId: string;
       partIndex: number;
       text: string;
     }
   | {
-      type: "reasoning_delta";
+      type: typeof CHAT_ACTION_TYPE.REASONING_DELTA;
       messageId: string;
       partIndex: number;
       content: string;
     }
   | {
-      type: "tool_start";
+      type: typeof CHAT_ACTION_TYPE.TOOL_START;
       messageId: string;
       partIndex: number;
       toolCallId: string;
@@ -138,20 +165,20 @@ export type ChatAction =
       input: Record<string, unknown>;
     }
   | {
-      type: "tool_running";
+      type: typeof CHAT_ACTION_TYPE.TOOL_RUNNING;
       messageId: string;
       partIndex: number;
       toolCallId: string;
     }
   | {
-      type: "tool_update";
+      type: typeof CHAT_ACTION_TYPE.TOOL_UPDATE;
       messageId: string;
       partIndex: number;
       toolCallId: string;
       content: string;
     }
   | {
-      type: "tool_end";
+      type: typeof CHAT_ACTION_TYPE.TOOL_END;
       messageId: string;
       partIndex: number;
       toolCallId: string;
@@ -160,4 +187,4 @@ export type ChatAction =
       error?: string;
       durationMs: number;
     }
-  | { type: "reset" };
+  | { type: typeof CHAT_ACTION_TYPE.RESET };

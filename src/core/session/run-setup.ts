@@ -20,7 +20,6 @@ export interface SessionRunSetup {
 function hashPrompt(input: string) {
   return createHash("sha256").update(input).digest("hex");
 }
-
 export async function prepareSessionRunSetup(
   workspaceRoot: string,
 ): Promise<SessionRunSetup> {

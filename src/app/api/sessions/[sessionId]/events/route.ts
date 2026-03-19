@@ -4,7 +4,10 @@ import { encodeSSE } from "@/core/sse/encoder";
 import { liveSessionRegistry } from "@/core/session/live-session-registry";
 import { repairSessionIfStale } from "@/core/session/stale-run-recovery";
 import { getSessionDetail } from "@/db/repositories/session-repository";
-import { SSE_HEARTBEAT_INTERVAL_MS } from "@/lib/constants";
+import {
+  SESSION_EVENT_TYPE,
+  SSE_HEARTBEAT_INTERVAL_MS,
+} from "@/lib/constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +58,7 @@ export async function GET(
       const heartbeatTimer = setInterval(() => {
         push(
           encodeSSE({
-            type: "session.heartbeat",
+            type: SESSION_EVENT_TYPE.HEARTBEAT,
             sessionId,
             seq: -1,
             timestamp: Date.now(),
@@ -65,7 +68,7 @@ export async function GET(
 
       push(
         encodeSSE({
-          type: "session.status",
+          type: SESSION_EVENT_TYPE.STATUS,
           sessionId,
           seq: -1,
           timestamp: Date.now(),

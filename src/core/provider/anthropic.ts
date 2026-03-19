@@ -31,7 +31,8 @@ export function createAnthropicProvider(
     async stream(
       params: LLMStreamParams,
     ): Promise<AsyncIterable<LLMStreamChunk>> {
-      const { messages, systemPrompt, tools, temperature, maxTokens } = params;
+      const { messages, systemPrompt, tools, temperature, maxTokens, signal } =
+        params;
 
       const llm = new ChatAnthropic({
         apiKey,
@@ -58,6 +59,7 @@ export function createAnthropicProvider(
       // 获取流
       const stream = await llmWithTools.stream(langChainMessages, {
         ...callOptions,
+        signal,
       });
 
       return transformStream(stream);

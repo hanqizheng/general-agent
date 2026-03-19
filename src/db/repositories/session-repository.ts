@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { sessions } from "@/db/schema";
 import type { SessionDetailDto, SessionSummaryDto } from "@/lib/session-dto";
 import { genSessionId } from "@/lib/id";
+import { SESSION_STATUS } from "@/lib/constants";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbExecutor = typeof db | DbTransaction;
@@ -29,8 +30,8 @@ function toDetail(row: typeof sessions.$inferSelect): SessionDetailDto {
 export async function createSession(workspaceRoot: string) {
   const session = {
     id: genSessionId(),
-    title: "New Session",
-    status: "idle" as const,
+    title: "New Chat",
+    status: SESSION_STATUS.IDLE,
     workspaceRoot,
   };
 
@@ -107,7 +108,7 @@ export async function markSessionRunState(
   executor: DbExecutor,
   sessionId: string,
   activeRunId: string | null,
-  status: "idle" | "busy" | "error",
+  status: (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS],
 ) {
   const [row] = await executor
     .update(sessions)
@@ -150,7 +151,7 @@ export async function maybePromoteSessionTitle(
     return;
   }
 
-  const title = text.trim().slice(0, 80) || "New Session";
+  const title = text.trim().slice(0, 80) || "New Chat";
   await executor
     .update(sessions)
     .set({
@@ -158,6 +159,43 @@ export async function maybePromoteSessionTitle(
       updatedAt: new Date(),
     })
     .where(eq(sessions.id, sessionId));
+}
+
+export async function updateSessionPresentation(
+  executor: DbExecutor,
+  sessionId: string,
+  input: {
+    title?: string;
+    titleSource?: "fallback" | "ai";
+  },
+) {
+  const [current] = await executor
+    .select()
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), isNull(sessions.deletedAt)))
+    .limit(1);
+
+  if (!current) {
+    return null;
+  }
+
+  const nextMetadata = {
+    ...current.metadata,
+    ...(input.titleSource ? { titleSource: input.titleSource } : {}),
+    titleUpdatedAt: new Date().toISOString(),
+  };
+
+  const [row] = await executor
+    .update(sessions)
+    .set({
+      ...(input.title ? { title: input.title } : {}),
+      metadata: nextMetadata,
+      updatedAt: new Date(),
+    })
+    .where(eq(sessions.id, sessionId))
+    .returning();
+
+  return row ? toDetail(row) : null;
 }
 
 export async function softDeleteSession(sessionId: string) {

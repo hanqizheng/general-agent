@@ -87,6 +87,7 @@ export async function POST(
 
   let createdRunId: string | null = null;
   let createdUserMessageId: string | null = null;
+  let shouldGenerateSessionPresentation = false;
   let responseSession = session;
 
   try {
@@ -125,6 +126,7 @@ export async function POST(
 
       createdRunId = run.id;
       createdUserMessageId = userMessage.id;
+      shouldGenerateSessionPresentation = userMessage.sequence === 1;
       responseSession = {
         ...responseSession,
         activeRunId: sessionRow.activeRunId,
@@ -164,6 +166,7 @@ export async function POST(
     userMessage: parsed.data.text,
     workspaceRoot: session.workspaceRoot,
     setup,
+    generateSessionPresentation: shouldGenerateSessionPresentation,
   }).catch(() => undefined);
 
   return NextResponse.json(

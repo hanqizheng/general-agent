@@ -1,4 +1,10 @@
-import { MESSAGE_PART_KIND, TOOL_CALL_STATUS } from "./constants";
+import {
+  MESSAGE_PART_END_STATE,
+  MESSAGE_PART_KIND,
+  MESSAGE_STATUS,
+  TOOL_CALL_STATUS,
+} from "./constants";
+import { CHAT_TRANSPORT_STATUS } from "./chat-constants";
 import type { ChatState, UIMessage, UIMessagePart } from "./chat-types";
 import type {
   SessionDetailDto,
@@ -12,7 +18,7 @@ function mapPartState(state: TranscriptPartDto["state"]) {
 }
 
 function mapTranscriptPartToUiPart(part: TranscriptPartDto): UIMessagePart {
-  if (part.kind === "text") {
+  if (part.kind === MESSAGE_PART_KIND.TEXT) {
     return {
       kind: MESSAGE_PART_KIND.TEXT,
       partIndex: part.partIndex,
@@ -21,7 +27,7 @@ function mapTranscriptPartToUiPart(part: TranscriptPartDto): UIMessagePart {
     };
   }
 
-  if (part.kind === "reasoning") {
+  if (part.kind === MESSAGE_PART_KIND.REASONING) {
     return {
       kind: MESSAGE_PART_KIND.REASONING,
       partIndex: part.partIndex,
@@ -45,7 +51,9 @@ function mapTranscriptPartToUiPart(part: TranscriptPartDto): UIMessagePart {
     status:
       part.state === null
         ? TOOL_CALL_STATUS.RUNNING
-        : part.state === "error"
+        : part.state === MESSAGE_PART_END_STATE.INTERRUPTED
+          ? TOOL_CALL_STATUS.INTERRUPTED
+        : part.state === MESSAGE_PART_END_STATE.ERROR
           ? TOOL_CALL_STATUS.ERROR
           : TOOL_CALL_STATUS.DONE,
     updates: [],
@@ -66,7 +74,8 @@ export function mapTranscriptMessageToUiMessage(
     messageId: message.id,
     role: message.role,
     parts: message.parts.map(mapTranscriptPartToUiPart),
-    isStreaming: message.status === "streaming",
+    isStreaming: message.status === MESSAGE_STATUS.STREAMING,
+    status: message.status,
   };
 }
 
@@ -81,7 +90,9 @@ export function buildInitialChatState(
   return {
     sessionId: session.id,
     status: session.status,
-    error: null,
+    requestError: null,
+    transportError: null,
+    transportStatus: CHAT_TRANSPORT_STATUS.CONNECTED,
     loopEndReason: null,
     currentTurnIndex: Math.max(
       0,

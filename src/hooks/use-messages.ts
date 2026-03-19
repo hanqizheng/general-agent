@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 
+import { CHAT_ACTION_TYPE } from "@/lib/chat-constants";
 import { mapMessagesPageToUiMessages } from "@/lib/chat-mappers";
 import type { ChatAction } from "@/lib/chat-types";
 import type {
@@ -19,7 +20,17 @@ interface UseMessagesOptions {
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    throw new Error(errorText || `Request failed: ${response.status}`);
+    let parsedMessage = "";
+    try {
+      const parsed = JSON.parse(errorText) as {
+        error?: string;
+        message?: string;
+      };
+      parsedMessage = parsed.message || parsed.error || "";
+    } catch {
+      parsedMessage = "";
+    }
+    throw new Error(parsedMessage || errorText || `Request failed: ${response.status}`);
   }
 
   return (await response.json()) as T;
@@ -40,7 +51,10 @@ export function useMessages({
     (page: SessionMessagesPageDto, mode: "replace" | "prepend" = "replace") => {
       const messages = mapMessagesPageToUiMessages(page);
       dispatch({
-        type: mode === "replace" ? "hydrate_messages" : "prepend_history_page",
+        type:
+          mode === "replace"
+            ? CHAT_ACTION_TYPE.HYDRATE_MESSAGES
+            : CHAT_ACTION_TYPE.PREPEND_HISTORY_PAGE,
         messages,
       });
       setHasMore(page.hasMore);
@@ -99,12 +113,12 @@ export function useMessages({
       const payload = await parseJsonResponse<StartRunResponseDto>(response);
       onSessionChange(payload.session);
       dispatch({
-        type: "session_status",
+        type: CHAT_ACTION_TYPE.SESSION_STATUS,
         sessionId: payload.session.id,
         status: payload.session.status,
       });
       dispatch({
-        type: "user_message",
+        type: CHAT_ACTION_TYPE.USER_MESSAGE,
         messageId: payload.userMessage.id,
         text,
       });

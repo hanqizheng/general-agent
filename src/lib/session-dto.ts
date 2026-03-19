@@ -1,4 +1,10 @@
-import type { MessagePartEndState, SessionStatus, UIMessageRole } from "./chat-types";
+import type {
+  MessagePartEndState,
+  MessagePartKind,
+  MessageStatus,
+  SessionStatus,
+  UIMessageRole,
+} from "./chat-types";
 
 export interface SessionSummaryDto {
   id: string;
@@ -15,7 +21,7 @@ export interface SessionDetailDto extends SessionSummaryDto {
 
 export interface TranscriptPartDto {
   partIndex: number;
-  kind: "text" | "reasoning" | "tool";
+  kind: MessagePartKind;
   state: MessagePartEndState | null;
   textContent: string | null;
   payload: Record<string, unknown>;
@@ -27,7 +33,7 @@ export interface TranscriptMessageDto {
   turnIndex: number | null;
   role: UIMessageRole;
   visibility: "visible" | "internal";
-  status: "streaming" | "completed" | "error" | "interrupted";
+  status: MessageStatus;
   createdAt: string;
   completedAt: string | null;
   parts: TranscriptPartDto[];

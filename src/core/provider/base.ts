@@ -48,6 +48,7 @@ export interface LLMStreamParams {
   tools?: LLMToolDefinition[];
   temperature?: number;
   maxTokens?: number;
+  signal?: AbortSignal;
 }
 
 /**

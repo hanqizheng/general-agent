@@ -1,54 +1,91 @@
 "use client";
 
-import { Header } from "@/components/layout/header";
-import { Sidebar } from "@/components/layout/sidebar";
+import { useState } from "react";
+
+import { SessionSidebar } from "@/components/layout/session-sidebar";
 import { useChat } from "@/components/providers/chat-provider";
+import { useSessionContext } from "@/components/providers/session-provider";
+import type { SessionStatus } from "@/lib/chat-types";
+import { SESSION_STATUS } from "@/lib/constants";
 
 import { InputArea } from "./input-area";
 import { MessageList } from "./message-list";
 
-export function ChatContainer() {
-  const { state, sendMessage, loadOlder, hasMore, isLoadingMore } = useChat();
+function getStatusLabel(status: SessionStatus) {
+  switch (status) {
+    case SESSION_STATUS.BUSY:
+      return "Running";
+    case SESSION_STATUS.ERROR:
+      return "Error";
+    case SESSION_STATUS.IDLE:
+    default:
+      return "Ready";
+  }
+}
 
-  const messageCount = state.messages.length;
-  const partCount = state.messages.reduce(
-    (total, message) => total + message.parts.length,
-    0,
-  );
-  const toolCount = state.messages.reduce(
-    (total, message) =>
-      total + message.parts.filter((part) => part.kind === "tool").length,
-    0,
-  );
+export function ChatContainer() {
+  const {
+    state,
+    sendMessage,
+    abort,
+    loadOlder,
+    hasMore,
+    isLoadingMore,
+    isStopping,
+  } = useChat();
+  const { session } = useSessionContext();
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(240,206,146,0.35),_transparent_30%),linear-gradient(180deg,_#f6f0e5_0%,_#efe6d7_40%,_#ebe2d5_100%)] px-4 py-4 text-stone-950 lg:px-6">
-      <div className="mx-auto grid min-h-[calc(100vh-2rem)] max-w-[1500px] gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <Sidebar
-          currentTurnIndex={state.currentTurnIndex}
-          loopEndReason={state.loopEndReason}
-          messageCount={messageCount}
-          partCount={partCount}
-          status={state.status}
-          toolCount={toolCount}
+    <div className="h-dvh overflow-hidden bg-stone-100 text-stone-950">
+      <div className="flex h-full min-h-0">
+        <SessionSidebar
+          currentSession={session}
+          isMobileOpen={isMobileSidebarOpen}
+          onMobileOpenChange={setIsMobileSidebarOpen}
         />
 
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-[32px] border border-stone-900/10 bg-white/72 shadow-[0_24px_80px_rgba(54,40,18,0.12)] backdrop-blur">
-          <Header
-            currentTurnIndex={state.currentTurnIndex}
-            loopEndReason={state.loopEndReason}
-            messageCount={messageCount}
-            sessionId={state.sessionId}
-            status={state.status}
-          />
+        <section className="flex min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,_#fcfcfa_0%,_#f7f5f1_100%)]">
+          <header className="border-b border-stone-200 bg-white/80 px-4 py-4 backdrop-blur lg:px-8">
+            <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <button
+                  className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 transition hover:bg-stone-100 lg:hidden"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  type="button"
+                >
+                  Chats
+                </button>
 
-          {state.error ? (
-            <div className="mx-4 mt-4 rounded-2xl border border-rose-300/70 bg-rose-50 px-4 py-3 text-sm text-rose-800 lg:mx-6">
-              {state.error}
+                <div className="min-w-0">
+                  <h1 className="truncate text-lg font-semibold tracking-tight text-stone-950">
+                    {session.title}
+                  </h1>
+                  <p className="truncate text-sm text-stone-500">
+                    {session.workspaceRoot}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-600">
+                {getStatusLabel(session.status)}
+              </div>
+            </div>
+          </header>
+
+          {state.requestError ? (
+            <div className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 lg:px-8">
+              <div className="mx-auto max-w-4xl">{state.requestError}</div>
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 px-4 pb-4 pt-4 lg:px-6">
+          {state.transportError ? (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 lg:px-8">
+              <div className="mx-auto max-w-4xl">{state.transportError}</div>
+            </div>
+          ) : null}
+
+          <div className="min-h-0 flex-1 overflow-hidden px-4 lg:px-8">
             <MessageList
               hasMore={hasMore}
               isLoadingMore={isLoadingMore}
@@ -58,8 +95,13 @@ export function ChatContainer() {
             />
           </div>
 
-          <div className="border-t border-stone-900/8 px-4 py-4 lg:px-6">
-            <InputArea busy={state.status === "busy"} onSend={sendMessage} />
+          <div className="border-t border-stone-200 bg-white/80 px-4 py-4 backdrop-blur lg:px-8">
+            <InputArea
+              busy={session.status === SESSION_STATUS.BUSY}
+              isStopping={isStopping}
+              onAbort={abort}
+              onSend={sendMessage}
+            />
           </div>
         </section>
       </div>

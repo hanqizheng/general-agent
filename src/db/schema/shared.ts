@@ -1,7 +1,12 @@
 import { sql } from "drizzle-orm";
 import { integer, jsonb, text, timestamp } from "drizzle-orm/pg-core";
+import { MESSAGE_STATUS, SESSION_STATUS } from "@/lib/constants";
 
-export const sessionStatusValues = ["idle", "busy", "error"] as const;
+export const sessionStatusValues = [
+  SESSION_STATUS.IDLE,
+  SESSION_STATUS.BUSY,
+  SESSION_STATUS.ERROR,
+] as const;
 export const runStatusValues = [
   "queued",
   "running",
@@ -13,10 +18,10 @@ export const runStatusValues = [
 export const messageRoleValues = ["user", "assistant"] as const;
 export const messageVisibilityValues = ["visible", "internal"] as const;
 export const messageStatusValues = [
-  "streaming",
-  "completed",
-  "error",
-  "interrupted",
+  MESSAGE_STATUS.STREAMING,
+  MESSAGE_STATUS.COMPLETED,
+  MESSAGE_STATUS.ERROR,
+  MESSAGE_STATUS.INTERRUPTED,
 ] as const;
 export const messagePartKindValues = [
   "text",
@@ -67,6 +72,7 @@ export type MessagePartPayload =
       isError: boolean;
       durationMs: number | null;
       error: string | null;
+      interrupted?: boolean;
     };
 
 export function textEnumColumn<TValues extends readonly [string, ...string[]]>(

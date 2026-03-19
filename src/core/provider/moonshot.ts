@@ -31,7 +31,8 @@ export function createMoonshotProvider(
     async stream(
       params: LLMStreamParams,
     ): Promise<AsyncIterable<LLMStreamChunk>> {
-      const { messages, tools, temperature, maxTokens, systemPrompt } = params;
+      const { messages, tools, temperature, maxTokens, systemPrompt, signal } =
+        params;
 
       const llm = new ChatOpenAI({
         apiKey,
@@ -52,7 +53,7 @@ export function createMoonshotProvider(
           ? llm.bindTools(tools.map(toLangChainTool))
           : llm;
 
-      const stream = await llmWithTools.stream(langChainMessages);
+      const stream = await llmWithTools.stream(langChainMessages, { signal });
 
       return transformStream(stream);
     },

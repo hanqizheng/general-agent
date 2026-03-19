@@ -1,11 +1,14 @@
-import type {
+import {
+  MESSAGE_PART_KIND,
+  SESSION_EVENT_TYPE,
+} from "@/lib/constants";
+import {
   SESSION_STATUS,
   LOOP_END_REASON,
   TURN_END_REASON,
   TOOL_END_STATE,
   MESSAGE_PART_END_STATE,
 } from "./constants";
-import { MESSAGE_PART_KIND } from "@/lib/constants";
 import type { MessageRole } from "@/lib/types";
 
 export type SessionStatus =
@@ -27,8 +30,13 @@ export interface EventBase {
 }
 
 interface SessionStatusEvent extends EventBase {
-  type: "session.status";
+  type: typeof SESSION_EVENT_TYPE.STATUS;
   status: SessionStatus;
+}
+
+interface SessionPresentationEvent extends EventBase {
+  type: typeof SESSION_EVENT_TYPE.PRESENTATION;
+  title: string;
 }
 
 interface LoopStartEvent extends EventBase {
@@ -140,7 +148,7 @@ interface ToolEndEvent extends EventBase {
 }
 
 interface ErrorEvent extends EventBase {
-  type: "session.error";
+  type: typeof SESSION_EVENT_TYPE.ERROR;
   error: {
     code: string;
     message: string;
@@ -149,11 +157,12 @@ interface ErrorEvent extends EventBase {
 }
 
 interface HeartbeatEvent extends EventBase {
-  type: "session.heartbeat";
+  type: typeof SESSION_EVENT_TYPE.HEARTBEAT;
 }
 
 export type AgentEvent =
   | SessionStatusEvent
+  | SessionPresentationEvent
   | LoopStartEvent
   | LoopEndEvent
   | TurnStartEvent

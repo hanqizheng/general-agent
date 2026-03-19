@@ -23,6 +23,7 @@ import {
   touchSession,
 } from "./session-repository";
 import { genMessageId, genPartId } from "@/lib/id";
+import { MESSAGE_PART_END_STATE, MESSAGE_STATUS } from "@/lib/constants";
 import type {
   SessionMessagesPageDto,
   TranscriptMessageDto,
@@ -53,11 +54,19 @@ function mapPartKind(kind: typeof messageParts.$inferSelect.kind): TranscriptPar
 function mapPartState(
   state: typeof messageParts.$inferSelect.state,
 ): TranscriptPartDto["state"] {
-  if (state === "streaming") {
+  if (state === MESSAGE_STATUS.STREAMING) {
     return null;
   }
 
-  return state === "completed" ? "complete" : "error";
+  if (state === MESSAGE_STATUS.COMPLETED) {
+    return "complete";
+  }
+
+  if (state === MESSAGE_STATUS.INTERRUPTED) {
+    return MESSAGE_PART_END_STATE.INTERRUPTED;
+  }
+
+  return MESSAGE_PART_END_STATE.ERROR;
 }
 
 function toTranscriptMessages(
@@ -113,7 +122,7 @@ export async function insertVisibleUserMessage(
       turnIndex: input.turnIndex,
       role: "user",
       visibility: "visible",
-      status: "completed",
+      status: MESSAGE_STATUS.COMPLETED,
       createdAt: now,
       completedAt: now,
     })
@@ -159,7 +168,7 @@ export async function createAssistantMessage(
       turnIndex: input.turnIndex,
       role: "assistant",
       visibility: "visible",
-      status: "streaming",
+      status: MESSAGE_STATUS.STREAMING,
       createdAt: now,
     })
     .returning();
@@ -206,7 +215,7 @@ export async function ensureInternalToolResultMessage(
       turnIndex: input.turnIndex,
       role: "user",
       visibility: "internal",
-      status: "streaming",
+      status: MESSAGE_STATUS.STREAMING,
       createdAt: now,
     })
     .returning();
@@ -305,7 +314,7 @@ export async function markMessageStatus(
     .update(messages)
     .set({
       status,
-      completedAt: status === "streaming" ? null : new Date(),
+      completedAt: status === MESSAGE_STATUS.STREAMING ? null : new Date(),
     })
     .where(eq(messages.id, messageId));
 }
@@ -313,7 +322,7 @@ export async function markMessageStatus(
 export async function markRunMessagesInterrupted(
   executor: DbExecutor,
   runId: string,
-  status: "interrupted" | "error",
+  status: typeof MESSAGE_STATUS.INTERRUPTED | typeof MESSAGE_STATUS.ERROR,
 ) {
   await executor
     .update(messages)
@@ -321,14 +330,19 @@ export async function markRunMessagesInterrupted(
       status,
       completedAt: new Date(),
     })
-    .where(and(eq(messages.runId, runId), eq(messages.status, "streaming")));
+    .where(
+      and(
+        eq(messages.runId, runId),
+        eq(messages.status, MESSAGE_STATUS.STREAMING),
+      ),
+    );
 
   await executor.execute(sql`
     update message_parts
     set state = ${status}, updated_at = now()
     where message_id in (
       select id from messages where run_id = ${runId} and status = ${status}
-    ) and state = 'streaming'
+    ) and state = ${MESSAGE_STATUS.STREAMING}
   `);
 }
 
@@ -406,7 +420,12 @@ export async function getCompletedTranscript(sessionId: string) {
   const rows = await db
     .select()
     .from(messages)
-    .where(and(eq(messages.sessionId, sessionId), eq(messages.status, "completed")))
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.status, MESSAGE_STATUS.COMPLETED),
+      ),
+    )
     .orderBy(asc(messages.sequence));
 
   const messageIds = rows.map((row) => row.id);
@@ -420,4 +439,61 @@ export async function getCompletedTranscript(sessionId: string) {
       : [];
 
   return { messages: rows, parts: partRows };
+}
+
+function extractVisibleText(
+  message: TranscriptMessageDto | undefined,
+): string | null {
+  if (!message) {
+    return null;
+  }
+
+  const text = message.parts
+    .filter((part) => part.kind === "text" && part.textContent)
+    .map((part) => part.textContent?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+
+  return text.length > 0 ? text : null;
+}
+
+export async function getSessionPresentationSeed(sessionId: string) {
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.sessionId, sessionId), eq(messages.visibility, "visible")))
+    .orderBy(asc(messages.sequence))
+    .limit(8);
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const messageIds = rows.map((row) => row.id);
+  const partRows = await db
+    .select()
+    .from(messageParts)
+    .where(inArray(messageParts.messageId, messageIds))
+    .orderBy(asc(messageParts.messageId), asc(messageParts.partIndex));
+
+  const transcript = toTranscriptMessages(rows, partRows);
+  const userMessage = transcript.find((message) => message.role === "user");
+  const assistantMessage = transcript.find(
+    (message) =>
+      message.role === "assistant" &&
+      message.status !== MESSAGE_STATUS.STREAMING,
+  );
+
+  const userText = extractVisibleText(userMessage);
+  const assistantText = extractVisibleText(assistantMessage);
+
+  if (!userText || !assistantText) {
+    return null;
+  }
+
+  return {
+    userText,
+    assistantText,
+  };
 }

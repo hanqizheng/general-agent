@@ -1,4 +1,7 @@
 import type { AgentEvent } from "@/core/events/types";
+import { SESSION_EVENT_TYPE, SESSION_STATUS } from "@/lib/constants";
+
+type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 
 interface SessionSubscriber {
   id: string;
@@ -10,7 +13,7 @@ interface LiveSessionEntry {
   runPromise: Promise<void> | null;
   abortController: AbortController | null;
   subscribers: Map<string, SessionSubscriber>;
-  status: "idle" | "busy" | "error";
+  status: SessionStatus;
   lastTouchedAt: number;
   abortRequested: boolean;
   gcTimer: ReturnType<typeof setTimeout> | null;
@@ -27,7 +30,7 @@ function getOrCreateEntry(map: Map<string, LiveSessionEntry>, sessionId: string)
     runPromise: null,
     abortController: null,
     subscribers: new Map(),
-    status: "idle",
+    status: SESSION_STATUS.IDLE,
     lastTouchedAt: Date.now(),
     abortRequested: false,
     gcTimer: null,
@@ -73,7 +76,7 @@ export class LiveSessionRegistry {
     entry.runId = runId;
     entry.abortController = abortController;
     entry.runPromise = runPromise;
-    entry.status = "busy";
+    entry.status = SESSION_STATUS.BUSY;
     entry.abortRequested = false;
     entry.lastTouchedAt = Date.now();
     if (entry.gcTimer) {
@@ -85,7 +88,7 @@ export class LiveSessionRegistry {
   broadcast(sessionId: string, event: AgentEvent) {
     const entry = getOrCreateEntry(this.sessions, sessionId);
     entry.lastTouchedAt = Date.now();
-    if (event.type === "session.status") {
+    if (event.type === SESSION_EVENT_TYPE.STATUS) {
       entry.status = event.status;
     }
 
@@ -129,7 +132,7 @@ export class LiveSessionRegistry {
   }
 
   getStatus(sessionId: string) {
-    return this.sessions.get(sessionId)?.status ?? "idle";
+    return this.sessions.get(sessionId)?.status ?? SESSION_STATUS.IDLE;
   }
 
   private scheduleGc(sessionId: string, entry: LiveSessionEntry) {

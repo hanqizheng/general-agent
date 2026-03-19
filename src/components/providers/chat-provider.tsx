@@ -6,14 +6,18 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
+  useState,
 } from "react";
 
 import { useChatState } from "@/hooks/use-chat-state";
 import { useMessages } from "@/hooks/use-messages";
 import { useSession } from "@/hooks/use-session";
 import { useSessionEvents } from "@/hooks/use-session-events";
+import { CHAT_ACTION_TYPE } from "@/lib/chat-constants";
 import { buildInitialChatState } from "@/lib/chat-mappers";
-import type { ChatState } from "@/lib/chat-types";
+import type { ChatState, SessionStatus } from "@/lib/chat-types";
+import { SESSION_STATUS } from "@/lib/constants";
 import type { SessionMessagesPageDto } from "@/lib/session-dto";
 import { useSessionContext } from "./session-provider";
 
@@ -24,6 +28,7 @@ interface ChatContextValue {
   loadOlder: () => Promise<void>;
   hasMore: boolean;
   isLoadingMore: boolean;
+  isStopping: boolean;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -35,7 +40,9 @@ export function ChatProvider({
   children: React.ReactNode;
   initialMessagesPage: SessionMessagesPageDto;
 }) {
-  const { session, setSession } = useSessionContext();
+  const { session, replaceSession, patchSession } = useSessionContext();
+  const [abortRequested, setAbortRequested] = useState(false);
+  const previousStatusRef = useRef<SessionStatus>(session.status);
   const seedState = useMemo(
     () => buildInitialChatState(session, initialMessagesPage),
     [initialMessagesPage, session],
@@ -54,7 +61,7 @@ export function ChatProvider({
   } = useMessages({
     sessionId: session.id,
     dispatch,
-    onSessionChange: setSession,
+    onSessionChange: replaceSession,
   });
 
   useEffect(() => {
@@ -62,43 +69,85 @@ export function ChatProvider({
   }, [initialMessagesPage, setPaginationState]);
 
   useEffect(() => {
-    setSession((current) => ({
-      ...current,
-      status: state.status,
-    }));
-  }, [setSession, state.status]);
+    if (
+      previousStatusRef.current === SESSION_STATUS.BUSY &&
+      state.status !== SESSION_STATUS.BUSY
+    ) {
+      const timer = setTimeout(() => {
+        void refreshSession()
+          .then((nextSession) => {
+            replaceSession(nextSession);
+          })
+          .catch(() => undefined);
+      }, 900);
+
+      previousStatusRef.current = state.status;
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+
+    previousStatusRef.current = state.status;
+
+    if (state.status !== SESSION_STATUS.BUSY) {
+      setAbortRequested(false);
+    }
+  }, [refreshSession, replaceSession, state.status]);
 
   const hydrateFromServer = useCallback(async () => {
     await Promise.all([
       refreshSession().then((nextSession) => {
-        setSession(nextSession);
+        replaceSession(nextSession);
         dispatch({
-          type: "hydrate_session",
+          type: CHAT_ACTION_TYPE.HYDRATE_SESSION,
           sessionId: nextSession.id,
           status: nextSession.status,
         });
       }),
       refreshLatest(),
     ]);
-  }, [dispatch, refreshLatest, refreshSession, setSession]);
+  }, [dispatch, refreshLatest, refreshSession, replaceSession]);
+
+  const handleSessionUpdate = useCallback(
+    (update: {
+      sessionId: string;
+      status?: SessionStatus;
+      title?: string;
+      activeRunId?: string | null;
+    }) => {
+      patchSession({
+        id: update.sessionId,
+        ...(update.status ? { status: update.status } : {}),
+        ...(update.title ? { title: update.title } : {}),
+        ...(update.activeRunId !== undefined
+          ? { activeRunId: update.activeRunId }
+          : {}),
+      });
+    },
+    [patchSession],
+  );
 
   useSessionEvents({
     sessionId: session.id,
     dispatch,
     onReconnect: hydrateFromServer,
+    onSessionUpdate: handleSessionUpdate,
   });
 
   const sendMessage = useCallback(
     async (text: string) => {
-      if (state.status === "busy") {
+      if (state.status === SESSION_STATUS.BUSY) {
         return;
       }
 
+      dispatch({ type: CHAT_ACTION_TYPE.CLEAR_REQUEST_ERROR });
+
       try {
+        setAbortRequested(false);
         await sendMessageRequest(text);
       } catch (error: unknown) {
         dispatch({
-          type: "session_error",
+          type: CHAT_ACTION_TYPE.REQUEST_ERROR,
           error:
             error instanceof Error ? error.message : "Failed to send message",
         });
@@ -108,11 +157,15 @@ export function ChatProvider({
   );
 
   const abort = useCallback(async () => {
+    dispatch({ type: CHAT_ACTION_TYPE.CLEAR_REQUEST_ERROR });
+
     try {
+      setAbortRequested(true);
       await abortSession();
     } catch (error: unknown) {
+      setAbortRequested(false);
       dispatch({
-        type: "session_error",
+        type: CHAT_ACTION_TYPE.REQUEST_ERROR,
         error:
           error instanceof Error ? error.message : "Failed to abort session",
       });
@@ -120,16 +173,21 @@ export function ChatProvider({
   }, [abortSession, dispatch]);
 
   const loadOlder = useCallback(async () => {
+    dispatch({ type: CHAT_ACTION_TYPE.CLEAR_REQUEST_ERROR });
+
     try {
       await loadOlderMessages();
     } catch (error: unknown) {
       dispatch({
-        type: "session_error",
+        type: CHAT_ACTION_TYPE.REQUEST_ERROR,
         error:
           error instanceof Error ? error.message : "Failed to load messages",
       });
     }
   }, [dispatch, loadOlderMessages]);
+
+  const isStopping =
+    abortRequested && session.status === SESSION_STATUS.BUSY;
 
   return (
     <ChatContext.Provider
@@ -140,6 +198,7 @@ export function ChatProvider({
         loadOlder,
         hasMore,
         isLoadingMore,
+        isStopping,
       }}
     >
       {children}

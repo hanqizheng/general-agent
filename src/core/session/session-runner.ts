@@ -1,12 +1,17 @@
 import { EventBus } from "@/core/events/bus";
+import { LOOP_END_REASON } from "@/core/events/constants";
 import { EventEmitter } from "@/core/events/emitter";
 import { runAgentLoop } from "@/core/agent/loop";
+import type { LoopEndReason } from "@/core/events/types";
 import { db } from "@/db";
 import { finalizeRun, markRunRunning } from "@/db/repositories/run-repository";
+import { markRunMessagesInterrupted } from "@/db/repositories/message-repository";
 import { markSessionRunState } from "@/db/repositories/session-repository";
+import { MESSAGE_STATUS, SESSION_STATUS } from "@/lib/constants";
 import { liveSessionRegistry } from "./live-session-registry";
 import { DbSessionProjector } from "./db-session-projector";
 import { assembleSessionContext } from "./context-assembler";
+import { maybeGenerateSessionPresentation } from "./presentation-generator";
 import type { SessionRunSetup } from "./run-setup";
 
 interface StartSessionRunParams {
@@ -15,21 +20,22 @@ interface StartSessionRunParams {
   userMessage: string;
   workspaceRoot: string;
   setup: SessionRunSetup;
+  generateSessionPresentation?: boolean;
 }
 
 function getTerminalStatus(
   sessionId: string,
-  endReason: "complete" | "interrupted" | "error" | "max_turns",
+  endReason: LoopEndReason,
 ) {
   if (liveSessionRegistry.wasAbortRequested(sessionId)) {
     return "aborted" as const;
   }
 
-  if (endReason === "error") {
+  if (endReason === LOOP_END_REASON.ERROR) {
     return "failed" as const;
   }
 
-  if (endReason === "interrupted") {
+  if (endReason === LOOP_END_REASON.INTERRUPTED) {
     return "interrupted" as const;
   }
 
@@ -55,7 +61,12 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
     try {
       await db.transaction(async (tx) => {
         await markRunRunning(tx, params.runId);
-        await markSessionRunState(tx, params.sessionId, params.runId, "busy");
+        await markSessionRunState(
+          tx,
+          params.sessionId,
+          params.runId,
+          SESSION_STATUS.BUSY,
+        );
       });
 
       const history = await assembleSessionContext(params.sessionId);
@@ -88,13 +99,27 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
               }
             : null,
         );
+        if (status === "aborted" || status === "interrupted") {
+          await markRunMessagesInterrupted(
+            tx,
+            params.runId,
+            MESSAGE_STATUS.INTERRUPTED,
+          );
+        }
         await markSessionRunState(
           tx,
           params.sessionId,
           null,
-          status === "failed" ? "error" : "idle",
+          status === "failed" ? SESSION_STATUS.ERROR : SESSION_STATUS.IDLE,
         );
       });
+
+      if (params.generateSessionPresentation && status === "completed") {
+        void maybeGenerateSessionPresentation({
+          provider: params.setup.provider,
+          sessionId: params.sessionId,
+        }).catch(() => undefined);
+      }
     } catch (error: unknown) {
       await projectionQueue.catch(() => undefined);
 
@@ -108,11 +133,18 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
           message:
             error instanceof Error ? error.message : "Unknown run error",
         });
+        await markRunMessagesInterrupted(
+          tx,
+          params.runId,
+          status === "aborted"
+            ? MESSAGE_STATUS.INTERRUPTED
+            : MESSAGE_STATUS.ERROR,
+        );
         await markSessionRunState(
           tx,
           params.sessionId,
           null,
-          status === "failed" ? "error" : "idle",
+          status === "failed" ? SESSION_STATUS.ERROR : SESSION_STATUS.IDLE,
         );
       });
     } finally {

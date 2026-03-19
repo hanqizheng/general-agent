@@ -1,4 +1,5 @@
 import { MESSAGE_PART_KIND, MESSAGE_ROLE } from "@/lib/constants";
+import { InterruptedError, isAbortError } from "@/lib/errors";
 import { genMessageId } from "@/lib/id";
 
 import { MESSAGE_PART_END_STATE, TOOL_END_STATE } from "../events/constants";
@@ -16,6 +17,7 @@ type StreamPartKind =
 export async function executeTurn(params: TurnParams): Promise<TurnResult> {
   const { emitter, provider, streamParams, toolRegistry, toolContext } = params;
   const msgId = genMessageId();
+  const interruptSignal = streamParams.signal;
 
   emitter.emit({ type: "message.start", messageId: msgId, role: "assistant" });
 
@@ -54,37 +56,39 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
   const flushCurrentPart = (
     state: MessagePartEndState = MESSAGE_PART_END_STATE.COMPLETE,
   ) => {
-    if (!currentPartKind || currentPartContent.length === 0) {
+    if (!currentPartKind) {
       return;
     }
 
-    if (currentPartKind === MESSAGE_PART_KIND.TEXT) {
-      if (state === MESSAGE_PART_END_STATE.COMPLETE) {
-        emitter.emit({
-          type: "message.text.done",
-          messageId: msgId,
-          partIndex,
-        });
-      }
+    if (currentPartContent.length > 0) {
+      if (currentPartKind === MESSAGE_PART_KIND.TEXT) {
+        if (state === MESSAGE_PART_END_STATE.COMPLETE) {
+          emitter.emit({
+            type: "message.text.done",
+            messageId: msgId,
+            partIndex,
+          });
+        }
 
-      contentBlocks.push({
-        type: "text",
-        text: currentPartContent,
-      });
-    } else {
-      if (state === MESSAGE_PART_END_STATE.COMPLETE) {
-        emitter.emit({
-          type: "message.reasoning.done",
-          messageId: msgId,
-          partIndex,
+        contentBlocks.push({
+          type: "text",
+          text: currentPartContent,
+        });
+      } else {
+        if (state === MESSAGE_PART_END_STATE.COMPLETE) {
+          emitter.emit({
+            type: "message.reasoning.done",
+            messageId: msgId,
+            partIndex,
+            text: currentPartContent,
+          });
+        }
+
+        contentBlocks.push({
+          type: "reasoning",
           text: currentPartContent,
         });
       }
-
-      contentBlocks.push({
-        type: "reasoning",
-        text: currentPartContent,
-      });
     }
 
     emitPartEnd(currentPartKind, state);
@@ -137,11 +141,47 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
     }
   };
 
+  const ensureNotInterrupted = () => {
+    if (interruptSignal?.aborted) {
+      throw new InterruptedError();
+    }
+  };
+
+  const interruptToolPart = (
+    toolCall: PendingToolCall,
+    durationMs = 0,
+    emitToolEnd = false,
+  ) => {
+    if (emitToolEnd) {
+      emitter.emit({
+        type: "message.tool.end",
+        messageId: msgId,
+        partIndex: toolCall.partIndex,
+        toolCallId: toolCall.id,
+        output: "Interrupted by user.",
+        error: undefined,
+        durationMs,
+        state: TOOL_END_STATE.INTERRUPTED,
+      });
+    }
+
+    emitter.emit({
+      type: "message.part.end",
+      messageId: msgId,
+      partIndex: toolCall.partIndex,
+      kind: MESSAGE_PART_KIND.TOOL,
+      state: MESSAGE_PART_END_STATE.INTERRUPTED,
+    });
+  };
+
   try {
     try {
       const stream = await provider.stream(streamParams);
+      ensureNotInterrupted();
 
       for await (const chunk of stream) {
+        ensureNotInterrupted();
+
         switch (chunk.type) {
           case "text_delta":
             appendToStreamPart(MESSAGE_PART_KIND.TEXT, chunk.text);
@@ -178,6 +218,16 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
         }
       }
     } catch (error) {
+      if (interruptSignal?.aborted || isAbortError(error)) {
+        flushCurrentPart(MESSAGE_PART_END_STATE.INTERRUPTED);
+
+        for (const toolCall of pendingToolCalls) {
+          interruptToolPart(toolCall);
+        }
+
+        throw new InterruptedError();
+      }
+
       flushCurrentPart(MESSAGE_PART_END_STATE.ERROR);
 
       for (const toolCall of pendingToolCalls) {
@@ -193,11 +243,19 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
       throw error;
     }
 
+    ensureNotInterrupted();
     flushCurrentPart();
 
     const toolResultBlocks: LLMContentBlock[] = [];
 
-    for (const toolCall of pendingToolCalls) {
+    for (const [index, toolCall] of pendingToolCalls.entries()) {
+      if (interruptSignal?.aborted) {
+        for (const remainingToolCall of pendingToolCalls.slice(index)) {
+          interruptToolPart(remainingToolCall);
+        }
+        throw new InterruptedError();
+      }
+
       emitter.emit({
         type: "message.tool.start",
         messageId: msgId,
@@ -218,17 +276,31 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
       let output = "";
       let isError = false;
 
+      ensureNotInterrupted();
+
       if (!toolRegistry || !toolContext) {
         output = "Tool system is not configured.";
         isError = true;
       } else {
         try {
+          ensureNotInterrupted();
           const tool = toolRegistry.get(toolCall.name);
           const parsed = tool.parameters.parse(toolCall.input);
           const result = await tool.execute(parsed, toolContext);
+          ensureNotInterrupted();
           output = result.output;
           isError = result.isError;
         } catch (error: unknown) {
+          if (interruptSignal?.aborted || isAbortError(error)) {
+            interruptToolPart(toolCall, Date.now() - startTime, true);
+
+            for (const remainingToolCall of pendingToolCalls.slice(index + 1)) {
+              interruptToolPart(remainingToolCall);
+            }
+
+            throw new InterruptedError();
+          }
+
           const message =
             error instanceof Error
               ? error.message

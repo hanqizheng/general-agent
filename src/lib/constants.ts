@@ -53,6 +53,22 @@ export const SESSION_STATUS = {
   ERROR: "error",
 } as const;
 
+/** message 生命周期状态：前后端共享 */
+export const MESSAGE_STATUS = {
+  STREAMING: "streaming",
+  COMPLETED: "completed",
+  ERROR: "error",
+  INTERRUPTED: "interrupted",
+} as const;
+
+/** session 级别 SSE 事件名：前后端共享 */
+export const SESSION_EVENT_TYPE = {
+  STATUS: "session.status",
+  ERROR: "session.error",
+  HEARTBEAT: "session.heartbeat",
+  PRESENTATION: "session.presentation",
+} as const;
+
 /** Agent Loop 结束原因 */
 export const LOOP_END_REASON = {
   COMPLETE: "complete",
@@ -65,12 +81,14 @@ export const LOOP_END_REASON = {
 export const TOOL_END_STATE = {
   COMPLETE: "complete",
   ERROR: "error",
+  INTERRUPTED: "interrupted",
 } as const;
 
 /** part 收口状态：对应 message.part.end.state */
 export const MESSAGE_PART_END_STATE = {
   COMPLETE: "complete",
   ERROR: "error",
+  INTERRUPTED: "interrupted",
 } as const;
 
 /** 工具调用生命周期状态（前端 UI 用） */
@@ -79,4 +97,5 @@ export const TOOL_CALL_STATUS = {
   RUNNING: "running",
   DONE: "done",
   ERROR: "error",
+  INTERRUPTED: "interrupted",
 } as const;

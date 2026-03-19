@@ -1,9 +1,11 @@
 import { DEFAULT_MAX_TURNS } from "@/lib/constants";
+import { isAbortError } from "@/lib/errors";
 import { buildContext } from "./context";
 import { AgentLoopResult, AgentLoopStartParams } from "./types";
 import { LoopEndReason } from "../events/types";
 import {
   LOOP_END_REASON,
+  SESSION_EVENT_TYPE,
   SESSION_STATUS,
   TURN_END_REASON,
 } from "../events/constants";
@@ -25,7 +27,10 @@ export async function runAgentLoop(
     toolRegistry,
   } = params;
 
-  emitter.emit({ type: "session.status", status: SESSION_STATUS.BUSY });
+  emitter.emit({
+    type: SESSION_EVENT_TYPE.STATUS,
+    status: SESSION_STATUS.BUSY,
+  });
 
   let messages = buildContext(history, userMessage);
   let turnCount = 0;
@@ -56,6 +61,7 @@ export async function runAgentLoop(
           messages,
           systemPrompt,
           tools,
+          signal: interruptSignal,
         },
         toolContext,
         toolRegistry,
@@ -78,10 +84,20 @@ export async function runAgentLoop(
         break;
       }
     } catch (error: unknown) {
+      if (interruptSignal?.aborted || isAbortError(error)) {
+        emitter.emit({
+          type: "turn.end",
+          turnId,
+          reason: TURN_END_REASON.INTERRUPTED,
+        });
+        endReason = LOOP_END_REASON.INTERRUPTED;
+        break;
+      }
+
       emitter.emit({ type: "turn.end", turnId, reason: TURN_END_REASON.ERROR });
 
       emitter.emit({
-        type: "session.error",
+        type: SESSION_EVENT_TYPE.ERROR,
         error: {
           code: "TURN_EXECUTION_ERROR",
           message:
@@ -102,7 +118,13 @@ export async function runAgentLoop(
   }
 
   emitter.emit({ type: "loop.end", reason: endReason });
-  emitter.emit({ type: "session.status", status: SESSION_STATUS.IDLE });
+  emitter.emit({
+    type: SESSION_EVENT_TYPE.STATUS,
+    status:
+      endReason === LOOP_END_REASON.ERROR
+        ? SESSION_STATUS.ERROR
+        : SESSION_STATUS.IDLE,
+  });
 
   return {
     endReason,
