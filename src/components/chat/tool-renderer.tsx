@@ -28,6 +28,8 @@ function getStatusClasses(status: UIToolPart["status"]) {
       return "border-amber-300/50 bg-amber-50 text-amber-800";
     case TOOL_CALL_STATUS.DONE:
       return "border-emerald-300/50 bg-emerald-50 text-emerald-800";
+    case TOOL_CALL_STATUS.INTERRUPTED:
+      return "border-stone-300/50 bg-stone-100 text-stone-700";
     case TOOL_CALL_STATUS.ERROR:
       return "border-rose-300/50 bg-rose-50 text-rose-800";
     default:
@@ -43,6 +45,8 @@ function getStatusLabel(status: UIToolPart["status"]) {
       return "running";
     case TOOL_CALL_STATUS.DONE:
       return "done";
+    case TOOL_CALL_STATUS.INTERRUPTED:
+      return "stopped";
     case TOOL_CALL_STATUS.ERROR:
       return "error";
     default:
@@ -53,7 +57,8 @@ function getStatusLabel(status: UIToolPart["status"]) {
 export function ToolRenderer({ part }: ToolRendererProps) {
   const shouldOpenOutput =
     part.status !== TOOL_CALL_STATUS.DONE ||
-    part.state === MESSAGE_PART_END_STATE.ERROR;
+    part.state === MESSAGE_PART_END_STATE.ERROR ||
+    part.state === MESSAGE_PART_END_STATE.INTERRUPTED;
 
   return (
     <section className="overflow-hidden rounded-[24px] border border-stone-900/10 bg-stone-950 text-stone-50 shadow-[0_18px_40px_rgba(23,18,12,0.18)]">

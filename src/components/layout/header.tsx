@@ -1,4 +1,5 @@
 import type { LoopEndReason, SessionStatus } from "@/lib/chat-types";
+import { SESSION_STATUS } from "@/lib/constants";
 
 interface HeaderProps {
   currentTurnIndex: number;
@@ -10,11 +11,11 @@ interface HeaderProps {
 
 function getStatusClasses(status: SessionStatus) {
   switch (status) {
-    case "busy":
+    case SESSION_STATUS.BUSY:
       return "border-amber-300/60 bg-amber-50 text-amber-800";
-    case "error":
+    case SESSION_STATUS.ERROR:
       return "border-rose-300/60 bg-rose-50 text-rose-800";
-    case "idle":
+    case SESSION_STATUS.IDLE:
     default:
       return "border-emerald-300/60 bg-emerald-50 text-emerald-800";
   }

@@ -11,6 +11,8 @@ export function ReasoningRenderer({ part }: ReasoningRendererProps) {
       ? "streaming"
       : part.state === MESSAGE_PART_END_STATE.ERROR
         ? "error"
+        : part.state === MESSAGE_PART_END_STATE.INTERRUPTED
+          ? "stopped"
         : "done";
 
   return (
