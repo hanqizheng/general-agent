@@ -65,11 +65,11 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <div className="grid h-full place-items-center">
-        <div className="max-w-xl rounded-[30px] bg-white/45 px-8 py-10 text-center shadow-[0_18px_60px_rgba(24,24,27,0.05)] backdrop-blur-sm">
-          <h2 className="text-2xl font-semibold tracking-tight text-stone-950">
+        <div className="max-w-xl rounded-[30px] bg-white/45 px-6 py-8 text-center shadow-[0_18px_60px_rgba(24,24,27,0.05)] backdrop-blur-sm sm:px-8 sm:py-10">
+          <h2 className="text-xl font-semibold tracking-tight text-stone-950 sm:text-2xl">
             Start a conversation
           </h2>
-          <p className="mt-3 text-sm leading-7 text-stone-500">
+          <p className="mt-3 text-sm leading-6 text-stone-500 sm:leading-7">
             Ask the assistant to inspect the project, explain a file, or help you
             implement a change.
           </p>
@@ -80,15 +80,15 @@ export function MessageList({
 
   return (
     <div
-      className="h-full overflow-y-auto pr-1"
+      className="h-full overflow-y-auto px-1 sm:px-0"
       onScroll={handleScroll}
       ref={scrollRef}
     >
-      <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-end gap-6 pb-4 pt-6 lg:pt-8">
+      <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-end gap-4 pb-3 pt-4 sm:gap-6 sm:pb-4 sm:pt-6 lg:pt-8">
         {hasMore ? (
           <div className="flex justify-center">
             <button
-              className="rounded-[16px] bg-white/75 px-4 py-2 text-xs font-medium text-stone-700 shadow-[0_10px_30px_rgba(24,24,27,0.06)] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-2xl bg-white/75 px-4 py-2 text-xs font-medium text-stone-700 shadow-[0_10px_30px_rgba(24,24,27,0.06)] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isLoadingMore}
               onClick={() => {
                 void onLoadOlder();

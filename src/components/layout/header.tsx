@@ -47,7 +47,7 @@ export function Header({
           </div>
         </div>
 
-        <div className="grid gap-2 text-sm text-stone-700 sm:grid-cols-3 lg:min-w-[420px]">
+        <div className="grid gap-2 text-sm text-stone-700 sm:grid-cols-3 lg:min-w-105">
           <div className="rounded-2xl border border-stone-900/8 bg-white/80 px-4 py-3">
             <div className="text-[11px] uppercase tracking-[0.18em] text-stone-500">
               Session

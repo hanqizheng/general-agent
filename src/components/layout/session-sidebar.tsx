@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PanelLeftClose, PanelLeftOpen, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { useSessionContext } from "@/components/providers/session-provider";
@@ -13,85 +14,6 @@ interface SessionSidebarProps {
   onDesktopOpenChange: (open: boolean) => void;
   isMobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
-}
-
-function OpenPanelIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-    >
-      <rect height="16" rx="3" width="18" x="3" y="4" />
-      <path d="M9 4v16" />
-      <path d="M12 12h6" />
-      <path d="M15 9l3 3-3 3" />
-    </svg>
-  );
-}
-
-function CollapsePanelIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-    >
-      <rect height="16" rx="3" width="18" x="3" y="4" />
-      <path d="M15 4v16" />
-      <path d="M12 12H6" />
-      <path d="M9 9l-3 3 3 3" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-    >
-      <path d="M12 5v14" />
-      <path d="M5 12h14" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-    >
-      <path d="M4 7h16" />
-      <path d="M10 11v6" />
-      <path d="M14 11v6" />
-      <path d="M6 7l1 11a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-11" />
-      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </svg>
-  );
 }
 
 export function SessionSidebar({
@@ -117,7 +39,9 @@ export function SessionSidebar({
       router.push(`/chat/${session.id}`);
     } catch (nextError: unknown) {
       setError(
-        nextError instanceof Error ? nextError.message : "Failed to create chat",
+        nextError instanceof Error
+          ? nextError.message
+          : "Failed to create chat",
       );
     } finally {
       setPendingSessionId(null);
@@ -128,7 +52,9 @@ export function SessionSidebar({
     setError(null);
     setPendingSessionId(sessionId);
 
-    const remainingSessions = sessions.filter((session) => session.id !== sessionId);
+    const remainingSessions = sessions.filter(
+      (session) => session.id !== sessionId,
+    );
 
     try {
       await removeSession(sessionId);
@@ -139,7 +65,9 @@ export function SessionSidebar({
       }
     } catch (nextError: unknown) {
       setError(
-        nextError instanceof Error ? nextError.message : "Failed to delete chat",
+        nextError instanceof Error
+          ? nextError.message
+          : "Failed to delete chat",
       );
     } finally {
       setPendingSessionId(null);
@@ -161,11 +89,11 @@ export function SessionSidebar({
         <button
           aria-expanded={false}
           aria-label="Open chats"
-          className="fixed left-4 top-4 z-40 hidden h-11 w-11 items-center justify-center rounded-[18px] bg-white/88 text-stone-700 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl transition hover:bg-white lg:inline-flex"
+          className="fixed left-4 top-4 z-40 hidden h-11 w-11 cursor-pointer items-center justify-center rounded-[18px] bg-white/88 text-stone-700 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl transition hover:bg-white lg:inline-flex"
           onClick={() => onDesktopOpenChange(true)}
           type="button"
         >
-          <OpenPanelIcon />
+          <PanelLeftOpen aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
         </button>
       ) : null}
 
@@ -173,23 +101,25 @@ export function SessionSidebar({
         <button
           aria-expanded={false}
           aria-label="Open chats"
-          className="fixed left-4 top-4 z-40 inline-flex h-11 w-11 items-center justify-center rounded-[18px] bg-white/88 text-stone-700 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl transition hover:bg-white lg:hidden"
+          className="fixed left-4 top-4 z-40 inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-[18px] bg-white/88 text-stone-700 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl transition hover:bg-white lg:hidden"
           onClick={() => onMobileOpenChange(true)}
           type="button"
         >
-          <OpenPanelIcon />
+          <PanelLeftOpen aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
         </button>
       ) : null}
 
       <div
         className={`fixed inset-0 z-30 bg-stone-950/18 backdrop-blur-[2px] transition lg:hidden ${
-          isMobileOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          isMobileOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
         }`}
         onClick={() => onMobileOpenChange(false)}
       />
 
       <aside
-        className={`fixed inset-y-4 left-4 z-40 w-[304px] flex-col overflow-hidden rounded-[30px] bg-[rgba(255,252,247,0.84)] shadow-[0_28px_90px_rgba(15,23,42,0.16)] backdrop-blur-xl ${
+        className={`fixed inset-y-4 left-4 z-40 w-[calc(100vw-2rem)] max-w-76 flex-col overflow-hidden rounded-[30px] bg-[rgba(255,252,247,0.84)] shadow-[0_28px_90px_rgba(15,23,42,0.16)] backdrop-blur-xl ${
           isMobileOpen ? "flex" : "hidden"
         } ${isDesktopOpen ? "lg:flex" : "lg:hidden"}`}
       >
@@ -204,24 +134,26 @@ export function SessionSidebar({
 
             <button
               aria-label="Collapse chats"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-[14px] bg-white/80 text-stone-600 transition hover:bg-white"
+              className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[14px] bg-white/80 text-stone-600 transition hover:bg-white"
               onClick={handleHide}
               type="button"
             >
-              <CollapsePanelIcon />
+              <PanelLeftClose aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
             </button>
           </div>
 
           <button
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[18px] bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+            className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-[18px] bg-emerald-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-200 disabled:text-emerald-50"
             disabled={pendingSessionId === "create"}
             onClick={() => {
               void handleCreate();
             }}
             type="button"
           >
-            <PlusIcon />
-            <span>{pendingSessionId === "create" ? "Creating..." : "New chat"}</span>
+            <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+            <span>
+              {pendingSessionId === "create" ? "Creating..." : "New chat"}
+            </span>
           </button>
         </div>
 
@@ -244,15 +176,15 @@ export function SessionSidebar({
 
               return (
                 <div
-                  className={`group flex items-center gap-1.5 rounded-[16px] px-1.5 py-1 transition ${
+                  className={`group flex cursor-pointer items-center gap-1.5 rounded-2xl px-1.5 py-1 transition ${
                     isActive
                       ? "bg-stone-950 text-white shadow-[0_12px_28px_rgba(24,24,27,0.18)]"
-                      : "bg-transparent text-stone-700 hover:bg-white/60"
+                      : "bg-transparent text-stone-700 hover:bg-white/72"
                   }`}
                   key={session.id}
                 >
                   <button
-                    className="min-w-0 flex-1 rounded-[12px] px-3 py-2.5 text-left"
+                    className="min-w-0 flex-1 cursor-pointer rounded-xl px-3 py-2.5 text-left"
                     onClick={() => {
                       onMobileOpenChange(false);
                       router.push(`/chat/${session.id}`);
@@ -270,10 +202,10 @@ export function SessionSidebar({
 
                   <button
                     aria-label={`Delete ${session.title}`}
-                    className={`inline-flex h-8 w-8 items-center justify-center rounded-[10px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                    className={`inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
                       isActive
-                        ? "text-white/70 hover:bg-white/10 hover:text-white"
-                        : "bg-transparent text-stone-400 opacity-0 hover:bg-white hover:text-stone-700 group-hover:opacity-100"
+                        ? "text-white/70 hover:bg-rose-300/18 hover:text-rose-100"
+                        : "bg-transparent text-stone-400 opacity-100 hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100"
                     }`}
                     disabled={isBusy || isPending}
                     onClick={() => {
@@ -281,7 +213,11 @@ export function SessionSidebar({
                     }}
                     type="button"
                   >
-                    {isPending ? "..." : <TrashIcon />}
+                    {isPending ? (
+                      "..."
+                    ) : (
+                      <Trash2 aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                    )}
                   </button>
                 </div>
               );

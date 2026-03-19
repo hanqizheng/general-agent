@@ -14,7 +14,9 @@ type CodeProps = ComponentPropsWithoutRef<"code"> & {
 
 const markdownComponents = {
   p: ({ children }: ComponentPropsWithoutRef<"p">) => (
-    <p className="my-3 leading-7 first:mt-0 last:mb-0">{children}</p>
+    <p className="chat-text-wrap my-3 leading-6 first:mt-0 last:mb-0 sm:leading-7">
+      {children}
+    </p>
   ),
   ul: ({ children }: ComponentPropsWithoutRef<"ul">) => (
     <ul className="my-3 list-disc space-y-2 pl-5 first:mt-0 last:mb-0">
@@ -26,28 +28,32 @@ const markdownComponents = {
       {children}
     </ol>
   ),
-  li: ({ children }: ComponentPropsWithoutRef<"li">) => <li>{children}</li>,
+  li: ({ children }: ComponentPropsWithoutRef<"li">) => (
+    <li className="chat-text-wrap">{children}</li>
+  ),
   blockquote: ({ children }: ComponentPropsWithoutRef<"blockquote">) => (
-    <blockquote className="my-4 rounded-[20px] bg-stone-100 px-4 py-3 text-stone-600 first:mt-0 last:mb-0">
+    <blockquote className="chat-text-wrap my-4 rounded-[20px] bg-stone-100 px-4 py-3 text-stone-600 first:mt-0 last:mb-0">
       {children}
     </blockquote>
   ),
   h1: ({ children }: ComponentPropsWithoutRef<"h1">) => (
-    <h1 className="mt-6 text-2xl font-semibold tracking-tight first:mt-0">
+    <h1 className="chat-text-wrap mt-6 text-xl font-semibold tracking-tight first:mt-0 sm:text-2xl">
       {children}
     </h1>
   ),
   h2: ({ children }: ComponentPropsWithoutRef<"h2">) => (
-    <h2 className="mt-5 text-xl font-semibold tracking-tight first:mt-0">
+    <h2 className="chat-text-wrap mt-5 text-lg font-semibold tracking-tight first:mt-0 sm:text-xl">
       {children}
     </h2>
   ),
   h3: ({ children }: ComponentPropsWithoutRef<"h3">) => (
-    <h3 className="mt-4 text-lg font-semibold first:mt-0">{children}</h3>
+    <h3 className="chat-text-wrap mt-4 text-base font-semibold first:mt-0 sm:text-lg">
+      {children}
+    </h3>
   ),
   a: ({ children, href }: ComponentPropsWithoutRef<"a">) => (
     <a
-      className="text-stone-900 underline decoration-stone-300 underline-offset-4 transition hover:decoration-stone-800"
+      className="chat-text-wrap break-words text-stone-900 underline decoration-stone-300 underline-offset-4 transition hover:decoration-stone-800"
       href={href}
       rel="noreferrer"
       target="_blank"
@@ -56,8 +62,8 @@ const markdownComponents = {
     </a>
   ),
   table: ({ children }: ComponentPropsWithoutRef<"table">) => (
-    <div className="my-4 overflow-x-auto rounded-[20px] bg-stone-100/80 p-2 first:mt-0 last:mb-0">
-      <table className="min-w-full text-sm">{children}</table>
+    <div className="my-4 w-full max-w-full overflow-x-auto rounded-[20px] bg-stone-100/80 p-2 first:mt-0 last:mb-0">
+      <table className="min-w-max text-sm">{children}</table>
     </div>
   ),
   thead: ({ children }: ComponentPropsWithoutRef<"thead">) => (
@@ -71,7 +77,7 @@ const markdownComponents = {
   ),
   hr: () => <hr className="my-5 h-px border-0 bg-stone-200" />,
   pre: ({ children }: ComponentPropsWithoutRef<"pre">) => (
-    <pre className="my-4 overflow-x-auto rounded-[20px] bg-stone-950 px-4 py-3 text-sm text-stone-100 first:mt-0 last:mb-0">
+    <pre className="my-4 max-w-full overflow-x-auto rounded-[20px] bg-stone-950 px-3 py-3 text-[13px] text-stone-100 first:mt-0 last:mb-0 sm:px-4 sm:text-sm">
       {children}
     </pre>
   ),
@@ -82,7 +88,7 @@ const markdownComponents = {
     if (!isBlock) {
       return (
         <code
-          className="rounded-md bg-stone-100 px-1.5 py-0.5 font-mono text-[0.92em] text-stone-900"
+          className="chat-text-wrap rounded-md bg-stone-100 px-1.5 py-0.5 font-mono text-[0.92em] text-stone-900"
           {...props}
         >
           {children}
@@ -100,7 +106,7 @@ const markdownComponents = {
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
-    <div className="text-[15px] leading-7 text-stone-800">
+    <div className="chat-text-wrap min-w-0 text-sm leading-6 text-stone-800 sm:text-[15px] sm:leading-7">
       <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]} skipHtml>
         {content}
       </ReactMarkdown>

@@ -16,7 +16,7 @@ export function ReasoningRenderer({ part }: ReasoningRendererProps) {
           : "Analysis complete";
 
   return (
-    <div className="rounded-[22px] bg-amber-100/80 px-4 py-3 text-amber-950 shadow-[0_12px_30px_rgba(217,119,6,0.08)]">
+    <div className="min-w-0 rounded-[22px] bg-amber-100/80 px-4 py-3 text-amber-950 shadow-[0_12px_30px_rgba(217,119,6,0.08)]">
       <div className="flex items-center gap-3">
         <span
           className={`h-2.5 w-2.5 rounded-full ${
@@ -28,7 +28,7 @@ export function ReasoningRenderer({ part }: ReasoningRendererProps) {
             Analysis
           </div>
           <div
-            className={`mt-1 text-sm font-medium ${
+            className={`chat-text-wrap mt-1 text-sm font-medium ${
               part.state === null ? "tool-running-text" : "text-amber-950"
             }`}
           >

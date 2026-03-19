@@ -31,7 +31,7 @@ export function Sidebar({
   toolCount,
 }: SidebarProps) {
   return (
-    <aside className="flex flex-col overflow-hidden rounded-[32px] border border-stone-900/10 bg-[linear-gradient(180deg,_rgba(255,253,248,0.94),_rgba(246,240,230,0.92))] p-6 shadow-[0_20px_60px_rgba(48,36,22,0.09)]">
+    <aside className="flex flex-col overflow-hidden rounded-4xl border border-stone-900/10 bg-[linear-gradient(180deg,_rgba(255,253,248,0.94),_rgba(246,240,230,0.92))] p-6 shadow-[0_20px_60px_rgba(48,36,22,0.09)]">
       <div className="space-y-4">
         <div className="inline-flex rounded-full border border-stone-900/10 bg-stone-900/5 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-stone-600">
           General Agent
@@ -70,7 +70,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="mt-6 rounded-[24px] border border-stone-900/8 bg-stone-950 px-4 py-4 text-stone-100">
+      <div className="mt-6 rounded-3xl border border-stone-900/8 bg-stone-950 px-4 py-4 text-stone-100">
         <div className="text-[11px] uppercase tracking-[0.2em] text-stone-400">
           State Model
         </div>
@@ -84,7 +84,7 @@ export function Sidebar({
         </pre>
       </div>
 
-      <div className="mt-6 space-y-3 rounded-[24px] border border-stone-900/8 bg-white/80 px-4 py-4">
+      <div className="mt-6 space-y-3 rounded-3xl border border-stone-900/8 bg-white/80 px-4 py-4">
         <div className="text-[11px] uppercase tracking-[0.2em] text-stone-500">
           Runtime Notes
         </div>

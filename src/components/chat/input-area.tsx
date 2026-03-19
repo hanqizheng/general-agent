@@ -41,10 +41,10 @@ export function InputArea({
 
   return (
     <div className="mx-auto w-full max-w-4xl">
-      <div className="rounded-[30px] bg-[rgba(255,252,247,0.9)] p-4 shadow-[0_20px_60px_rgba(24,24,27,0.08)] backdrop-blur-xl">
+      <div className="rounded-[28px] bg-[rgba(255,252,247,0.9)] p-3 shadow-[0_20px_60px_rgba(24,24,27,0.08)] backdrop-blur-xl sm:rounded-[30px] sm:p-4">
         <textarea
           ref={textareaRef}
-          className="min-h-[96px] w-full resize-none rounded-[22px] bg-stone-100/70 px-4 py-3 text-[15px] leading-7 text-stone-900 outline-none placeholder:text-stone-400"
+          className="min-h-22 w-full resize-none rounded-[20px] bg-stone-100/70 px-4 py-3 text-sm leading-6 text-stone-900 outline-none placeholder:text-stone-400 sm:min-h-24 sm:rounded-[22px] sm:text-[15px] sm:leading-7"
           disabled={busy}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -64,14 +64,14 @@ export function InputArea({
           value={text}
         />
 
-        <div className="mt-3 flex items-end justify-between gap-3">
-          <p className="rounded-[16px] bg-stone-100/80 px-3 py-2 text-xs text-stone-500">
+        <div className="mt-3 flex flex-col-reverse gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <p className="w-full rounded-2xl bg-stone-100/80 px-3 py-2 text-xs leading-5 text-stone-500 sm:w-auto">
             Enter to send. Shift + Enter for a new line.
           </p>
 
           {busy ? (
             <button
-              className="inline-flex min-w-[104px] items-center justify-center rounded-[16px] bg-stone-200 px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-full min-w-26 items-center justify-center rounded-2xl bg-stone-200 px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-300 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               disabled={isStopping}
               onClick={() => {
                 void onAbort();
@@ -82,7 +82,7 @@ export function InputArea({
             </button>
           ) : (
             <button
-              className="inline-flex min-w-[104px] items-center justify-center rounded-[16px] bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+              className="inline-flex w-full min-w-26 items-center justify-center rounded-2xl bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:w-auto"
               disabled={text.trim().length === 0}
               onClick={submit}
               type="button"

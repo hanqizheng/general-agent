@@ -77,3 +77,8 @@ body {
 .tool-running-dot {
   animation: tool-running-pulse 1.4s ease-in-out infinite;
 }
+
+.chat-text-wrap {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

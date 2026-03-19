@@ -24,7 +24,7 @@ export function ChatContainer() {
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const desktopShellPadding = isDesktopSidebarOpen
-    ? "lg:pl-[336px] lg:pr-8"
+    ? "lg:pl-84 lg:pr-8"
     : "lg:px-8";
 
   return (
@@ -40,7 +40,7 @@ export function ChatContainer() {
 
         <section className="flex min-w-0 flex-1 flex-col">
           <div
-            className={`flex min-h-0 flex-1 flex-col px-4 pt-4 transition-[padding] duration-300 lg:pt-5 ${desktopShellPadding}`}
+            className={`flex min-h-0 flex-1 flex-col px-3 pt-3 transition-[padding] duration-300 sm:px-4 sm:pt-4 lg:pt-5 ${desktopShellPadding}`}
           >
             <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
               {state.requestError ? (
@@ -68,7 +68,7 @@ export function ChatContainer() {
           </div>
 
           <div
-            className={`px-4 pb-4 pt-3 transition-[padding] duration-300 lg:pb-5 ${desktopShellPadding}`}
+            className={`px-3 pb-3 pt-3 transition-[padding] duration-300 sm:px-4 sm:pb-4 lg:pb-5 ${desktopShellPadding}`}
           >
             <InputArea
               busy={session.status === SESSION_STATUS.BUSY}
