@@ -28,7 +28,7 @@ const markdownComponents = {
   ),
   li: ({ children }: ComponentPropsWithoutRef<"li">) => <li>{children}</li>,
   blockquote: ({ children }: ComponentPropsWithoutRef<"blockquote">) => (
-    <blockquote className="my-4 border-l-2 border-stone-300 pl-4 text-stone-600 first:mt-0 last:mb-0">
+    <blockquote className="my-4 rounded-[20px] bg-stone-100 px-4 py-3 text-stone-600 first:mt-0 last:mb-0">
       {children}
     </blockquote>
   ),
@@ -56,22 +56,22 @@ const markdownComponents = {
     </a>
   ),
   table: ({ children }: ComponentPropsWithoutRef<"table">) => (
-    <div className="my-4 overflow-x-auto first:mt-0 last:mb-0">
-      <table className="min-w-full border-collapse text-sm">{children}</table>
+    <div className="my-4 overflow-x-auto rounded-[20px] bg-stone-100/80 p-2 first:mt-0 last:mb-0">
+      <table className="min-w-full text-sm">{children}</table>
     </div>
   ),
   thead: ({ children }: ComponentPropsWithoutRef<"thead">) => (
-    <thead className="border-b border-stone-200 bg-stone-50/80">{children}</thead>
+    <thead className="bg-stone-200/70">{children}</thead>
   ),
   th: ({ children }: ComponentPropsWithoutRef<"th">) => (
     <th className="px-3 py-2 text-left font-medium text-stone-700">{children}</th>
   ),
   td: ({ children }: ComponentPropsWithoutRef<"td">) => (
-    <td className="border-b border-stone-100 px-3 py-2 align-top">{children}</td>
+    <td className="bg-white/55 px-3 py-2 align-top">{children}</td>
   ),
-  hr: () => <hr className="my-5 border-stone-200" />,
+  hr: () => <hr className="my-5 h-px border-0 bg-stone-200" />,
   pre: ({ children }: ComponentPropsWithoutRef<"pre">) => (
-    <pre className="my-4 overflow-x-auto rounded-2xl border border-stone-200 bg-stone-950 px-4 py-3 text-sm text-stone-100 first:mt-0 last:mb-0">
+    <pre className="my-4 overflow-x-auto rounded-[20px] bg-stone-950 px-4 py-3 text-sm text-stone-100 first:mt-0 last:mb-0">
       {children}
     </pre>
   ),

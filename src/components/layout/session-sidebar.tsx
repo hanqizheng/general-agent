@@ -1,69 +1,118 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useSessionContext } from "@/components/providers/session-provider";
-import type { SessionStatus } from "@/lib/chat-types";
 import { SESSION_STATUS } from "@/lib/constants";
 import type { SessionDetailDto } from "@/lib/session-dto";
 
 interface SessionSidebarProps {
   currentSession: SessionDetailDto;
+  isDesktopOpen: boolean;
+  onDesktopOpenChange: (open: boolean) => void;
   isMobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
 }
 
-function formatSecondaryText(session: {
-  lastMessageAt: string | null;
-  status: SessionStatus;
-}) {
-  if (!session.lastMessageAt) {
-    if (session.status === SESSION_STATUS.BUSY) {
-      return "Running";
-    }
+function OpenPanelIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <rect height="16" rx="3" width="18" x="3" y="4" />
+      <path d="M9 4v16" />
+      <path d="M12 12h6" />
+      <path d="M15 9l3 3-3 3" />
+    </svg>
+  );
+}
 
-    if (session.status === SESSION_STATUS.ERROR) {
-      return "Error";
-    }
+function CollapsePanelIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <rect height="16" rx="3" width="18" x="3" y="4" />
+      <path d="M15 4v16" />
+      <path d="M12 12H6" />
+      <path d="M9 9l-3 3 3 3" />
+    </svg>
+  );
+}
 
-    return "Empty chat";
-  }
+function PlusIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
 
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(session.lastMessageAt));
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path d="M4 7h16" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M6 7l1 11a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-11" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
 }
 
 export function SessionSidebar({
   currentSession,
+  isDesktopOpen,
+  onDesktopOpenChange,
   isMobileOpen,
   onMobileOpenChange,
 }: SessionSidebarProps) {
   const router = useRouter();
   const { sessions, isLoadingSessions, createSession, removeSession } =
     useSessionContext();
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const orderedSessions = useMemo(() => {
-    const current = sessions.find((session) => session.id === currentSession.id);
-    if (current) {
-      return [current, ...sessions.filter((session) => session.id !== current.id)];
-    }
-
-    return sessions;
-  }, [currentSession.id, sessions]);
 
   const handleCreate = async () => {
     setError(null);
     setPendingSessionId("create");
     try {
       const session = await createSession();
+      onDesktopOpenChange(true);
       onMobileOpenChange(false);
       router.push(`/chat/${session.id}`);
     } catch (nextError: unknown) {
@@ -79,9 +128,7 @@ export function SessionSidebar({
     setError(null);
     setPendingSessionId(sessionId);
 
-    const remainingSessions = orderedSessions.filter(
-      (session) => session.id !== sessionId,
-    );
+    const remainingSessions = sessions.filter((session) => session.id !== sessionId);
 
     try {
       await removeSession(sessionId);
@@ -99,113 +146,143 @@ export function SessionSidebar({
     }
   };
 
-  const containerWidth = isCollapsed ? "lg:w-[84px]" : "lg:w-[320px]";
-  const mobileTransform = isMobileOpen ? "translate-x-0" : "-translate-x-full";
+  const handleHide = () => {
+    if (isMobileOpen) {
+      onMobileOpenChange(false);
+      return;
+    }
+
+    onDesktopOpenChange(false);
+  };
 
   return (
     <>
+      {!isDesktopOpen ? (
+        <button
+          aria-expanded={false}
+          aria-label="Open chats"
+          className="fixed left-4 top-4 z-40 hidden h-11 w-11 items-center justify-center rounded-[18px] bg-white/88 text-stone-700 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl transition hover:bg-white lg:inline-flex"
+          onClick={() => onDesktopOpenChange(true)}
+          type="button"
+        >
+          <OpenPanelIcon />
+        </button>
+      ) : null}
+
+      {!isMobileOpen ? (
+        <button
+          aria-expanded={false}
+          aria-label="Open chats"
+          className="fixed left-4 top-4 z-40 inline-flex h-11 w-11 items-center justify-center rounded-[18px] bg-white/88 text-stone-700 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl transition hover:bg-white lg:hidden"
+          onClick={() => onMobileOpenChange(true)}
+          type="button"
+        >
+          <OpenPanelIcon />
+        </button>
+      ) : null}
+
       <div
-        className={`fixed inset-0 z-20 bg-stone-950/20 transition lg:hidden ${
+        className={`fixed inset-0 z-30 bg-stone-950/18 backdrop-blur-[2px] transition lg:hidden ${
           isMobileOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         }`}
         onClick={() => onMobileOpenChange(false)}
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-[280px] flex-col border-r border-stone-200 bg-stone-50 transition-transform lg:static lg:translate-x-0 ${containerWidth} ${mobileTransform}`}
+        className={`fixed inset-y-4 left-4 z-40 w-[304px] flex-col overflow-hidden rounded-[30px] bg-[rgba(255,252,247,0.84)] shadow-[0_28px_90px_rgba(15,23,42,0.16)] backdrop-blur-xl ${
+          isMobileOpen ? "flex" : "hidden"
+        } ${isDesktopOpen ? "lg:flex" : "lg:hidden"}`}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-4 py-4">
-          {!isCollapsed ? (
+        <div className="bg-white/38 px-4 pb-3 pt-4">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-stone-900">Chats</div>
+              <div className="text-sm font-semibold tracking-tight text-stone-950">
+                Chats
+              </div>
               <div className="text-xs text-stone-500">Session history</div>
             </div>
-          ) : (
-            <div className="text-sm font-semibold text-stone-900">AI</div>
-          )}
+
+            <button
+              aria-label="Collapse chats"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[14px] bg-white/80 text-stone-600 transition hover:bg-white"
+              onClick={handleHide}
+              type="button"
+            >
+              <CollapsePanelIcon />
+            </button>
+          </div>
 
           <button
-            className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 transition hover:bg-stone-100"
-            onClick={() => setIsCollapsed((current) => !current)}
-            type="button"
-          >
-            {isCollapsed ? "Open" : "Collapse"}
-          </button>
-        </div>
-
-        <div className="border-b border-stone-200 px-4 py-4">
-          <button
-            className="inline-flex w-full items-center justify-center rounded-full bg-stone-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[18px] bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
             disabled={pendingSessionId === "create"}
             onClick={() => {
               void handleCreate();
             }}
             type="button"
           >
-            {pendingSessionId === "create" ? "Creating..." : isCollapsed ? "+" : "New chat"}
+            <PlusIcon />
+            <span>{pendingSessionId === "create" ? "Creating..." : "New chat"}</span>
           </button>
         </div>
 
         {error ? (
-          <div className="px-4 pt-4 text-xs text-rose-600">{error}</div>
+          <div className="px-4 pt-3 text-xs text-rose-600">{error}</div>
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-          <div className="space-y-2">
-            {isLoadingSessions && orderedSessions.length === 0 ? (
-              <div className="px-2 py-3 text-sm text-stone-500">Loading chats...</div>
+          <div className="space-y-1.5">
+            {isLoadingSessions && sessions.length === 0 ? (
+              <div className="rounded-[14px] bg-white/55 px-3 py-3 text-sm text-stone-500">
+                Loading chats...
+              </div>
             ) : null}
 
-            {orderedSessions.map((session) => {
+            {sessions.map((session) => {
               const isActive = session.id === currentSession.id;
               const isBusy = session.status === SESSION_STATUS.BUSY;
               const isPending = pendingSessionId === session.id;
 
               return (
                 <div
-                  className={`group flex items-start gap-2 rounded-2xl border px-2 py-2 transition ${
+                  className={`group flex items-center gap-1.5 rounded-[16px] px-1.5 py-1 transition ${
                     isActive
-                      ? "border-stone-300 bg-white shadow-[0_6px_20px_rgba(24,24,27,0.05)]"
-                      : "border-transparent hover:border-stone-200 hover:bg-white/80"
+                      ? "bg-stone-950 text-white shadow-[0_12px_28px_rgba(24,24,27,0.18)]"
+                      : "bg-transparent text-stone-700 hover:bg-white/60"
                   }`}
                   key={session.id}
                 >
                   <button
-                    className="min-w-0 flex-1 rounded-xl px-2 py-2 text-left"
+                    className="min-w-0 flex-1 rounded-[12px] px-3 py-2.5 text-left"
                     onClick={() => {
                       onMobileOpenChange(false);
                       router.push(`/chat/${session.id}`);
                     }}
                     type="button"
                   >
-                    {isCollapsed ? (
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 text-xs font-medium text-white">
-                        {session.title.slice(0, 1).toUpperCase()}
-                      </div>
-                    ) : (
-                      <>
-                        <div className="truncate text-sm font-medium text-stone-900">
-                          {session.title}
-                        </div>
-                        <div className="mt-1 truncate text-xs text-stone-500">
-                          {formatSecondaryText(session)}
-                        </div>
-                      </>
-                    )}
+                    <div
+                      className={`truncate text-sm font-medium ${
+                        isActive ? "text-white" : "text-stone-800"
+                      }`}
+                    >
+                      {session.title}
+                    </div>
                   </button>
 
-                  {!isCollapsed ? (
-                    <button
-                      className="rounded-full px-2 py-1 text-xs text-stone-400 opacity-0 transition hover:bg-stone-100 hover:text-stone-700 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isBusy || isPending}
-                      onClick={() => {
-                        void handleDelete(session.id);
-                      }}
-                      type="button"
-                    >
-                      {isPending ? "..." : "Delete"}
-                    </button>
-                  ) : null}
+                  <button
+                    aria-label={`Delete ${session.title}`}
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-[10px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                      isActive
+                        ? "text-white/70 hover:bg-white/10 hover:text-white"
+                        : "bg-transparent text-stone-400 opacity-0 hover:bg-white hover:text-stone-700 group-hover:opacity-100"
+                    }`}
+                    disabled={isBusy || isPending}
+                    onClick={() => {
+                      void handleDelete(session.id);
+                    }}
+                    type="button"
+                  >
+                    {isPending ? "..." : <TrashIcon />}
+                  </button>
                 </div>
               );
             })}

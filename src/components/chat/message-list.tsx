@@ -65,7 +65,7 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <div className="grid h-full place-items-center">
-        <div className="max-w-xl text-center">
+        <div className="max-w-xl rounded-[30px] bg-white/45 px-8 py-10 text-center shadow-[0_18px_60px_rgba(24,24,27,0.05)] backdrop-blur-sm">
           <h2 className="text-2xl font-semibold tracking-tight text-stone-950">
             Start a conversation
           </h2>
@@ -80,15 +80,15 @@ export function MessageList({
 
   return (
     <div
-      className="h-full overflow-y-auto pr-2"
+      className="h-full overflow-y-auto pr-1"
       onScroll={handleScroll}
       ref={scrollRef}
     >
-      <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-end gap-6 pb-6 pt-4">
+      <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-end gap-6 pb-4 pt-6 lg:pt-8">
         {hasMore ? (
           <div className="flex justify-center">
             <button
-              className="rounded-full border border-stone-200 bg-white px-4 py-2 text-xs font-medium text-stone-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-[16px] bg-white/75 px-4 py-2 text-xs font-medium text-stone-700 shadow-[0_10px_30px_rgba(24,24,27,0.06)] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isLoadingMore}
               onClick={() => {
                 void onLoadOlder();

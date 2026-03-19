@@ -41,10 +41,10 @@ export function InputArea({
 
   return (
     <div className="mx-auto w-full max-w-4xl">
-      <div className="rounded-[28px] border border-stone-200 bg-white px-4 py-3 shadow-[0_10px_30px_rgba(24,24,27,0.06)]">
+      <div className="rounded-[30px] bg-[rgba(255,252,247,0.9)] p-4 shadow-[0_20px_60px_rgba(24,24,27,0.08)] backdrop-blur-xl">
         <textarea
           ref={textareaRef}
-          className="min-h-[60px] w-full resize-none bg-transparent px-1 py-2 text-[15px] leading-7 text-stone-900 outline-none placeholder:text-stone-400"
+          className="min-h-[96px] w-full resize-none rounded-[22px] bg-stone-100/70 px-4 py-3 text-[15px] leading-7 text-stone-900 outline-none placeholder:text-stone-400"
           disabled={busy}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -64,14 +64,14 @@ export function InputArea({
           value={text}
         />
 
-        <div className="mt-3 flex items-center justify-between border-t border-stone-200 pt-3">
-          <p className="text-xs text-stone-500">
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <p className="rounded-[16px] bg-stone-100/80 px-3 py-2 text-xs text-stone-500">
             Enter to send. Shift + Enter for a new line.
           </p>
 
           {busy ? (
             <button
-              className="inline-flex min-w-[96px] items-center justify-center rounded-full border border-stone-300 bg-stone-100 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-w-[104px] items-center justify-center rounded-[16px] bg-stone-200 px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-300 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isStopping}
               onClick={() => {
                 void onAbort();
@@ -82,7 +82,7 @@ export function InputArea({
             </button>
           ) : (
             <button
-              className="inline-flex min-w-[96px] items-center justify-center rounded-full bg-stone-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+              className="inline-flex min-w-[104px] items-center justify-center rounded-[16px] bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
               disabled={text.trim().length === 0}
               onClick={submit}
               type="button"
