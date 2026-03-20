@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
-import { useSessionContext } from "@/components/providers/session-provider";
+import { useSessionsContext } from "@/components/providers/sessions-provider";
 import { SESSION_STATUS } from "@/lib/constants";
-import type { SessionDetailDto } from "@/lib/session-dto";
 
 interface SessionSidebarProps {
-  currentSession: SessionDetailDto;
   isDesktopOpen: boolean;
   onDesktopOpenChange: (open: boolean) => void;
   isMobileOpen: boolean;
@@ -17,17 +15,20 @@ interface SessionSidebarProps {
 }
 
 export function SessionSidebar({
-  currentSession,
   isDesktopOpen,
   onDesktopOpenChange,
   isMobileOpen,
   onMobileOpenChange,
 }: SessionSidebarProps) {
+  const params = useParams<{ sessionId?: string | string[] }>();
   const router = useRouter();
   const { sessions, isLoadingSessions, createSession, removeSession } =
-    useSessionContext();
+    useSessionsContext();
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const activeSessionId = Array.isArray(params.sessionId)
+    ? params.sessionId[0] ?? null
+    : params.sessionId ?? null;
 
   const handleCreate = async () => {
     setError(null);
@@ -59,7 +60,7 @@ export function SessionSidebar({
     try {
       await removeSession(sessionId);
 
-      if (currentSession.id === sessionId) {
+      if (activeSessionId === sessionId) {
         const nextSession = remainingSessions[0] ?? (await createSession());
         router.push(`/chat/${nextSession.id}`);
       }
@@ -170,7 +171,7 @@ export function SessionSidebar({
             ) : null}
 
             {sessions.map((session) => {
-              const isActive = session.id === currentSession.id;
+              const isActive = session.id === activeSessionId;
               const isBusy = session.status === SESSION_STATUS.BUSY;
               const isPending = pendingSessionId === session.id;
 

@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { SessionDetailDto, SessionSummaryDto } from "@/lib/session-dto";
 
@@ -23,11 +29,31 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function useSessions() {
-  const [sessions, setSessions] = useState<SessionSummaryDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export function useSessions(initialSessions: SessionSummaryDto[] = []) {
+  const [sessions, setSessions] = useState<SessionSummaryDto[]>(initialSessions);
+  const [isLoading, setIsLoading] = useState(initialSessions.length === 0);
+  const versionRef = useRef(0);
+
+  const updateSessions = useCallback(
+    (nextState: SetStateAction<SessionSummaryDto[]>) => {
+      setSessions((current) => {
+        const resolvedState =
+          typeof nextState === "function"
+            ? nextState(current)
+            : nextState;
+
+        if (resolvedState !== current) {
+          versionRef.current += 1;
+        }
+
+        return resolvedState;
+      });
+    },
+    [],
+  );
 
   const refresh = useCallback(async () => {
+    const requestVersion = versionRef.current;
     const response = await fetch("/api/sessions", {
       cache: "no-store",
     });
@@ -35,13 +61,18 @@ export function useSessions() {
     const payload = await parseJsonResponse<{ sessions: SessionSummaryDto[] }>(
       response,
     );
-    setSessions(payload.sessions);
+
+    if (versionRef.current === requestVersion) {
+      updateSessions(payload.sessions);
+    }
+
     setIsLoading(false);
     return payload.sessions;
-  }, []);
+  }, [updateSessions]);
 
   useEffect(() => {
     let cancelled = false;
+    const requestVersion = versionRef.current;
 
     const load = async () => {
       try {
@@ -53,8 +84,13 @@ export function useSessions() {
           response,
         );
 
+        if (!cancelled && versionRef.current === requestVersion) {
+          updateSessions(payload.sessions);
+          setIsLoading(false);
+          return;
+        }
+
         if (!cancelled) {
-          setSessions(payload.sessions);
           setIsLoading(false);
         }
       } catch {
@@ -69,7 +105,7 @@ export function useSessions() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [updateSessions]);
 
   const create = useCallback(async () => {
     const response = await fetch("/api/sessions", {
@@ -79,9 +115,9 @@ export function useSessions() {
     const payload = await parseJsonResponse<{ session: SessionDetailDto }>(
       response,
     );
-    setSessions((current) => [payload.session, ...current]);
+    updateSessions((current) => [payload.session, ...current]);
     return payload.session;
-  }, []);
+  }, [updateSessions]);
 
   const remove = useCallback(async (sessionId: string) => {
     const response = await fetch(`/api/sessions/${sessionId}`, {
@@ -91,11 +127,11 @@ export function useSessions() {
     const payload = await parseJsonResponse<{ session: SessionDetailDto }>(
       response,
     );
-    setSessions((current) =>
+    updateSessions((current) =>
       current.filter((session) => session.id !== payload.session.id),
     );
     return payload.session;
-  }, []);
+  }, [updateSessions]);
 
   return {
     sessions,
@@ -103,6 +139,6 @@ export function useSessions() {
     refresh,
     create,
     remove,
-    setSessions,
+    setSessions: updateSessions,
   };
 }
