@@ -77,7 +77,7 @@ function renderAssistantTextPart(part: Extract<UIMessagePart, { kind: "text" }>)
 export function MessageItem({ message }: MessageItemProps) {
   const isUser = message.role === MESSAGE_ROLE.USER;
   const messageWidthClass = isUser
-    ? "w-full max-w-full sm:max-w-[85%] lg:max-w-3xl"
+    ? "flex w-fit max-w-full flex-col items-end sm:max-w-[85%] lg:max-w-3xl"
     : "w-full max-w-full lg:max-w-4xl";
   const textParts = message.parts.filter(
     (part): part is Extract<UIMessagePart, { kind: "text" }> =>
