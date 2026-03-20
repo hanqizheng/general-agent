@@ -77,7 +77,7 @@ const markdownComponents = {
   ),
   hr: () => <hr className="my-5 h-px border-0 bg-stone-200" />,
   pre: ({ children }: ComponentPropsWithoutRef<"pre">) => (
-    <pre className="my-4 max-w-full overflow-x-auto rounded-[20px] bg-stone-950 px-3 py-3 text-[13px] text-stone-100 first:mt-0 last:mb-0 sm:px-4 sm:text-sm">
+    <pre className="my-4 max-w-full overflow-x-auto rounded-[20px] bg-zinc-800 px-3 py-3 text-zinc-100 first:mt-0 last:mb-0 sm:px-4 sm:text-sm">
       {children}
     </pre>
   ),

@@ -70,11 +70,11 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="mt-6 rounded-3xl border border-stone-900/8 bg-stone-950 px-4 py-4 text-stone-100">
-        <div className="text-[11px] uppercase tracking-[0.2em] text-stone-400">
+      <div className="mt-6 rounded-3xl border border-stone-900/8 bg-zinc-800 px-4 py-4 text-zinc-100">
+        <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-300">
           State Model
         </div>
-        <pre className="mt-3 overflow-auto font-mono text-xs leading-6 text-stone-200">
+        <pre className="mt-3 overflow-auto font-mono text-xs leading-6 text-zinc-200">
           {`Session
 └─ Message[]
    └─ Part[]

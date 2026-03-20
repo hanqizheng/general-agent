@@ -113,7 +113,7 @@ export function MessageItem({ message }: MessageItemProps) {
         </div>
 
         {isUser ? (
-          <div className="min-w-0 overflow-hidden rounded-2xl bg-stone-950 px-4 py-3 text-stone-50 shadow-[0_16px_40px_rgba(24,24,27,0.16)] sm:px-5 sm:py-4">
+          <div className="min-w-0 overflow-hidden rounded-2xl bg-zinc-800 px-4 py-3 text-zinc-50 shadow-[0_16px_40px_rgba(24,24,27,0.16)] sm:px-5 sm:py-4">
             <div className="chat-text-wrap whitespace-pre-wrap text-sm leading-6 sm:text-[15px] sm:leading-7">
               {textParts.map((part) => part.text).join("\n\n")}
             </div>

@@ -110,7 +110,7 @@ export function SessionSidebar({
       ) : null}
 
       <div
-        className={`fixed inset-0 z-30 bg-stone-950/18 backdrop-blur-[2px] transition lg:hidden ${
+        className={`fixed inset-0 z-30 bg-zinc-800/18 backdrop-blur-[2px] transition lg:hidden ${
           isMobileOpen
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0"
@@ -178,7 +178,7 @@ export function SessionSidebar({
                 <div
                   className={`group flex cursor-pointer items-center gap-1.5 rounded-2xl px-1.5 py-1 transition ${
                     isActive
-                      ? "bg-stone-950 text-white shadow-[0_12px_28px_rgba(24,24,27,0.18)]"
+                      ? "bg-zinc-800 text-white shadow-[0_12px_28px_rgba(24,24,27,0.18)]"
                       : "bg-transparent text-stone-700 hover:bg-white/72"
                   }`}
                   key={session.id}

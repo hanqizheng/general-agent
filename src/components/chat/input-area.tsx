@@ -82,7 +82,7 @@ export function InputArea({
             </button>
           ) : (
             <button
-              className="inline-flex w-full min-w-26 items-center justify-center rounded-2xl bg-stone-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:w-auto"
+              className="inline-flex w-full min-w-26 items-center justify-center rounded-2xl bg-zinc-800 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-stone-300 sm:w-auto"
               disabled={text.trim().length === 0}
               onClick={submit}
               type="button"
