@@ -89,9 +89,6 @@ export function ChatProvider({
 
     previousStatusRef.current = state.status;
 
-    if (state.status !== SESSION_STATUS.BUSY) {
-      setAbortRequested(false);
-    }
   }, [refreshSession, replaceSession, state.status]);
 
   const hydrateFromServer = useCallback(async () => {

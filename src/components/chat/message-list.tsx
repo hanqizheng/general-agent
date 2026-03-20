@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import type { SessionStatus, UIMessage } from "@/lib/chat-types";
+import type { UIMessage } from "@/lib/chat-types";
 
 import { MessageItem } from "./message-item";
 
@@ -11,7 +11,6 @@ interface MessageListProps {
   isLoadingMore: boolean;
   messages: UIMessage[];
   onLoadOlder: () => void | Promise<void>;
-  status: SessionStatus;
 }
 
 export function MessageList({
@@ -19,36 +18,27 @@ export function MessageList({
   isLoadingMore,
   messages,
   onLoadOlder,
-  status,
 }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const [stickToBottom, setStickToBottom] = useState(true);
-
-  const liveSignature = useMemo(() => {
-    const lastMessage = messages[messages.length - 1];
-    const lastPart = lastMessage?.parts[lastMessage.parts.length - 1];
-
-    return [
-      messages.length,
-      lastMessage?.messageId ?? "",
-      lastMessage?.status ?? "",
-      lastPart?.partIndex ?? -1,
-      lastPart?.state ?? "open",
-      status,
-    ].join(":");
-  }, [messages, status]);
 
   useEffect(() => {
     if (!stickToBottom) {
       return;
     }
 
-    bottomRef.current?.scrollIntoView({
-      behavior: "auto",
-      block: "end",
+    const frameId = requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({
+        behavior: "auto",
+        block: "end",
+      });
     });
-  }, [liveSignature, stickToBottom]);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
+  }, [messages, stickToBottom]);
 
   const handleScroll = () => {
     const node = scrollRef.current;

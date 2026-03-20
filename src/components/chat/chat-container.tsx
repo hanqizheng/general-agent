@@ -61,7 +61,6 @@ export function ChatContainer() {
                   isLoadingMore={isLoadingMore}
                   messages={state.messages}
                   onLoadOlder={loadOlder}
-                  status={state.status}
                 />
               </div>
             </div>
