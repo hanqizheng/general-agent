@@ -27,11 +27,15 @@ The engine is organized into six layers:
 git clone git@github.com:hanqizheng/general-agent.git
 cd general-agent
 npm install
-docker compose up -d        # MySQL
+docker compose up -d        # PostgreSQL 17.9
 cp .env.local.example .env.local
 # Edit .env.local — add at least one LLM provider API key
 npm run dev
 ```
+
+If you previously ran the local PostgreSQL 16 container, recreate the `postgres_data`
+volume before first startup on PostgreSQL 17.9. PostgreSQL data directories are not
+compatible across major versions.
 
 Test with curl:
 
@@ -116,7 +120,7 @@ Optionally include helper scripts or reference files alongside `SKILL.md`. The i
 
 ## Tech Stack
 
-Next.js 16 (App Router) / TypeScript / LangChain / Zod v4 / MySQL + Drizzle ORM / Web Streams API + SSE / nanoid
+Next.js 16 (App Router) / TypeScript / LangChain / Zod v4 / PostgreSQL + Drizzle ORM / Web Streams API + SSE / nanoid
 
 ## License
 
