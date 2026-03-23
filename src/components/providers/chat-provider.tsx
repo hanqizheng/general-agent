@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { useChatState } from "@/hooks/use-chat-state";
+import { consumePendingMessage } from "@/hooks/use-initial-message";
 import { useMessages } from "@/hooks/use-messages";
 import { useSession } from "@/hooks/use-session";
 import { useSessionEvents } from "@/hooks/use-session-events";
@@ -152,6 +153,17 @@ export function ChatProvider({
     },
     [dispatch, sendMessageRequest, state.status],
   );
+
+  const initialMessageSentRef = useRef(false);
+
+  useEffect(() => {
+    if (initialMessageSentRef.current) return;
+    const text = consumePendingMessage(session.id);
+    if (text) {
+      initialMessageSentRef.current = true;
+      void sendMessage(text);
+    }
+  }, [session.id, sendMessage]);
 
   const abort = useCallback(async () => {
     dispatch({ type: CHAT_ACTION_TYPE.CLEAR_REQUEST_ERROR });

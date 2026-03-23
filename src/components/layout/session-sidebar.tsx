@@ -22,7 +22,7 @@ export function SessionSidebar({
 }: SessionSidebarProps) {
   const params = useParams<{ sessionId?: string | string[] }>();
   const router = useRouter();
-  const { sessions, isLoadingSessions, createSession, removeSession } =
+  const { sessions, isLoadingSessions, removeSession } =
     useSessionsContext();
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,23 +30,9 @@ export function SessionSidebar({
     ? params.sessionId[0] ?? null
     : params.sessionId ?? null;
 
-  const handleCreate = async () => {
-    setError(null);
-    setPendingSessionId("create");
-    try {
-      const session = await createSession();
-      onDesktopOpenChange(true);
-      onMobileOpenChange(false);
-      router.push(`/chat/${session.id}`);
-    } catch (nextError: unknown) {
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Failed to create chat",
-      );
-    } finally {
-      setPendingSessionId(null);
-    }
+  const handleCreate = () => {
+    onMobileOpenChange(false);
+    router.push("/chat");
   };
 
   const handleDelete = async (sessionId: string) => {
@@ -61,8 +47,11 @@ export function SessionSidebar({
       await removeSession(sessionId);
 
       if (activeSessionId === sessionId) {
-        const nextSession = remainingSessions[0] ?? (await createSession());
-        router.push(`/chat/${nextSession.id}`);
+        if (remainingSessions.length > 0) {
+          router.push(`/chat/${remainingSessions[0].id}`);
+        } else {
+          router.push("/chat");
+        }
       }
     } catch (nextError: unknown) {
       setError(
@@ -144,17 +133,12 @@ export function SessionSidebar({
           </div>
 
           <button
-            className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-[18px] bg-emerald-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-200 disabled:text-emerald-50"
-            disabled={pendingSessionId === "create"}
-            onClick={() => {
-              void handleCreate();
-            }}
+            className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-[18px] bg-emerald-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500"
+            onClick={handleCreate}
             type="button"
           >
             <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-            <span>
-              {pendingSessionId === "create" ? "Creating..." : "New chat"}
-            </span>
+            <span>New chat</span>
           </button>
         </div>
 

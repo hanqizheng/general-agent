@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useParams } from "next/navigation";
 
 import { SessionSidebar } from "@/components/layout/session-sidebar";
 
@@ -16,7 +17,9 @@ interface ChatShellContextValue {
 const ChatShellContext = createContext<ChatShellContextValue | null>(null);
 
 export function ChatShell({ children }: { children: React.ReactNode }) {
-  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
+  const params = useParams<{ sessionId?: string | string[] }>();
+  const hasSession = Boolean(params.sessionId);
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(hasSession);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const desktopShellPadding = isDesktopSidebarOpen
     ? "lg:pl-84 lg:pr-8"
