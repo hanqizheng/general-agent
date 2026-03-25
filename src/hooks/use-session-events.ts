@@ -3,6 +3,10 @@
 import { useEffect } from "react";
 
 import {
+  isAuthRedirectError,
+  redirectToLogin,
+} from "@/lib/client-auth";
+import {
   CHAT_ACTION_TYPE,
   CHAT_TRANSPORT_STATUS,
 } from "@/lib/chat-constants";
@@ -54,6 +58,15 @@ export function useSessionEvents({
           signal: controller.signal,
         });
 
+        if (response.status === 401 || response.redirected) {
+          redirectToLogin();
+        }
+
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!contentType.includes("text/event-stream")) {
+          throw new Error(`Event stream failed: ${response.status}`);
+        }
+
         if (!response.ok || !response.body) {
           throw new Error(`Event stream failed: ${response.status}`);
         }
@@ -77,6 +90,10 @@ export function useSessionEvents({
         }
       } catch (error: unknown) {
         if (controller.signal.aborted) {
+          return;
+        }
+
+        if (isAuthRedirectError(error)) {
           return;
         }
 

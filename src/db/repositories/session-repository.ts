@@ -27,11 +27,15 @@ function toDetail(row: typeof sessions.$inferSelect): SessionDetailDto {
   };
 }
 
-export async function createSession(workspaceRoot: string) {
+export async function createSession(
+  workspaceRoot: string,
+  userId: string,
+) {
   const session = {
     id: genSessionId(),
     title: "New Chat",
     status: SESSION_STATUS.IDLE,
+    userId,
     workspaceRoot,
   };
 
@@ -39,7 +43,7 @@ export async function createSession(workspaceRoot: string) {
   return toDetail(created);
 }
 
-export async function getSessionDetail(sessionId: string) {
+export async function getSessionDetailInternal(sessionId: string) {
   const [row] = await db
     .select()
     .from(sessions)
@@ -49,22 +53,38 @@ export async function getSessionDetail(sessionId: string) {
   return row ? toDetail(row) : null;
 }
 
-export async function listSessionSummaries(limit = 50) {
+export async function getOwnedSessionDetail(sessionId: string, userId: string) {
+  const [row] = await db
+    .select()
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.id, sessionId),
+        eq(sessions.userId, userId),
+        isNull(sessions.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  return row ? toDetail(row) : null;
+}
+
+export async function listSessionSummaries(userId: string, limit = 50) {
   const rows = await db
     .select()
     .from(sessions)
-    .where(isNull(sessions.deletedAt))
+    .where(and(eq(sessions.userId, userId), isNull(sessions.deletedAt)))
     .orderBy(desc(sessions.lastMessageAt), desc(sessions.createdAt))
     .limit(limit);
 
   return rows.map(toSummary);
 }
 
-export async function findLatestSession() {
+export async function findLatestSession(userId: string) {
   const [row] = await db
     .select()
     .from(sessions)
-    .where(isNull(sessions.deletedAt))
+    .where(and(eq(sessions.userId, userId), isNull(sessions.deletedAt)))
     .orderBy(desc(sessions.lastMessageAt), desc(sessions.createdAt))
     .limit(1);
 
@@ -198,14 +218,20 @@ export async function updateSessionPresentation(
   return row ? toDetail(row) : null;
 }
 
-export async function softDeleteSession(sessionId: string) {
+export async function softDeleteSession(sessionId: string, userId: string) {
   const [row] = await db
     .update(sessions)
     .set({
       deletedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(and(eq(sessions.id, sessionId), isNull(sessions.deletedAt)))
+    .where(
+      and(
+        eq(sessions.id, sessionId),
+        eq(sessions.userId, userId),
+        isNull(sessions.deletedAt),
+      ),
+    )
     .returning();
 
   return row ? toDetail(row) : null;

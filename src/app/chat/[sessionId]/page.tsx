@@ -1,11 +1,12 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { ChatContainer } from "@/components/chat/chat-container";
 import { ChatProvider } from "@/components/providers/chat-provider";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { repairSessionIfStale } from "@/core/session/stale-run-recovery";
 import { hydrateVisibleMessagesPage } from "@/db/repositories/message-repository";
-import { getSessionDetail } from "@/db/repositories/session-repository";
+import { getOwnedSessionDetail } from "@/db/repositories/session-repository";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,22 @@ export default async function SessionPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    redirect("/login");
+  }
+
+  let ownedSession = await getOwnedSessionDetail(sessionId, userId);
+  if (!ownedSession) {
+    notFound();
+  }
+
   await repairSessionIfStale(sessionId);
 
-  const session = await getSessionDetail(sessionId);
-  if (!session) {
+  ownedSession = await getOwnedSessionDetail(sessionId, userId);
+  if (!ownedSession) {
     notFound();
   }
 
@@ -29,7 +42,7 @@ export default async function SessionPage({
   );
 
   return (
-    <SessionProvider initialSession={session}>
+    <SessionProvider initialSession={ownedSession}>
       <ChatProvider initialMessagesPage={initialMessagesPage}>
         <ChatContainer />
       </ChatProvider>

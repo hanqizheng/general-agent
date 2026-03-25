@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useParams } from "next/navigation";
+import type { Session } from "next-auth";
 
 import { SessionSidebar } from "@/components/layout/session-sidebar";
 
@@ -16,7 +17,13 @@ interface ChatShellContextValue {
 
 const ChatShellContext = createContext<ChatShellContextValue | null>(null);
 
-export function ChatShell({ children }: { children: React.ReactNode }) {
+export function ChatShell({
+  children,
+  user,
+}: {
+  children: React.ReactNode;
+  user: Session["user"];
+}) {
   const params = useParams<{ sessionId?: string | string[] }>();
   const hasSession = Boolean(params.sessionId);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(hasSession);
@@ -41,6 +48,7 @@ export function ChatShell({ children }: { children: React.ReactNode }) {
             onDesktopOpenChange={setIsDesktopSidebarOpen}
             isMobileOpen={isMobileSidebarOpen}
             onMobileOpenChange={setIsMobileSidebarOpen}
+            user={user}
           />
 
           <section className="flex min-w-0 flex-1 flex-col">{children}</section>

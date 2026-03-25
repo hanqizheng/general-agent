@@ -7,7 +7,10 @@ import {
   findStaleRuns,
   findStaleRunsForSession,
 } from "@/db/repositories/run-repository";
-import { getSessionDetail, markSessionRunState } from "@/db/repositories/session-repository";
+import {
+  getSessionDetailInternal,
+  markSessionRunState,
+} from "@/db/repositories/session-repository";
 import { liveSessionRegistry } from "./live-session-registry";
 import { env } from "@/lib/config";
 
@@ -36,7 +39,7 @@ export async function repairSessionIfStale(sessionId: string) {
     return;
   }
 
-  const session = await getSessionDetail(sessionId);
+  const session = await getSessionDetailInternal(sessionId);
   if (!session?.activeRunId) {
     return;
   }

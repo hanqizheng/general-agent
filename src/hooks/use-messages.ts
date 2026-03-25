@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 
 import { CHAT_ACTION_TYPE } from "@/lib/chat-constants";
+import { parseJsonResponse } from "@/lib/client-auth";
 import { mapMessagesPageToUiMessages } from "@/lib/chat-mappers";
 import type { ChatAction } from "@/lib/chat-types";
 import type {
@@ -15,25 +16,6 @@ interface UseMessagesOptions {
   sessionId: string;
   dispatch: React.Dispatch<ChatAction>;
   onSessionChange: (session: SessionDetailDto) => void;
-}
-
-async function parseJsonResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    let parsedMessage = "";
-    try {
-      const parsed = JSON.parse(errorText) as {
-        error?: string;
-        message?: string;
-      };
-      parsedMessage = parsed.message || parsed.error || "";
-    } catch {
-      parsedMessage = "";
-    }
-    throw new Error(parsedMessage || errorText || `Request failed: ${response.status}`);
-  }
-
-  return (await response.json()) as T;
 }
 
 export function useMessages({

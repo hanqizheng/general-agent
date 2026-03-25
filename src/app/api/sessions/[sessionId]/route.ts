@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { repairSessionIfStale } from "@/core/session/stale-run-recovery";
 import {
-  getSessionDetail,
+  getOwnedSessionDetail,
   softDeleteSession,
 } from "@/db/repositories/session-repository";
+import { requireUserId } from "@/lib/auth-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,9 +15,15 @@ export async function GET(
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
-  await repairSessionIfStale(sessionId);
+  const userId = await requireUserId();
 
-  const session = await getSessionDetail(sessionId);
+  let session = await getOwnedSessionDetail(sessionId, userId);
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  await repairSessionIfStale(sessionId);
+  session = await getOwnedSessionDetail(sessionId, userId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
@@ -29,9 +36,15 @@ export async function DELETE(
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
-  await repairSessionIfStale(sessionId);
+  const userId = await requireUserId();
 
-  const session = await getSessionDetail(sessionId);
+  let session = await getOwnedSessionDetail(sessionId, userId);
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  await repairSessionIfStale(sessionId);
+  session = await getOwnedSessionDetail(sessionId, userId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
@@ -43,7 +56,7 @@ export async function DELETE(
     );
   }
 
-  const deleted = await softDeleteSession(sessionId);
+  const deleted = await softDeleteSession(sessionId, userId);
   if (!deleted) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }

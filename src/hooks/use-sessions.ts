@@ -8,26 +8,8 @@ import {
   useState,
 } from "react";
 
+import { parseJsonResponse } from "@/lib/client-auth";
 import type { SessionDetailDto, SessionSummaryDto } from "@/lib/session-dto";
-
-async function parseJsonResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    let parsedMessage = "";
-    try {
-      const parsed = JSON.parse(errorText) as {
-        error?: string;
-        message?: string;
-      };
-      parsedMessage = parsed.message || parsed.error || "";
-    } catch {
-      parsedMessage = "";
-    }
-    throw new Error(parsedMessage || errorText || `Request failed: ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-}
 
 export function useSessions(initialSessions: SessionSummaryDto[] = []) {
   const [sessions, setSessions] = useState<SessionSummaryDto[]>(initialSessions);
