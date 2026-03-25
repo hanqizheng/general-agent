@@ -3,11 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { encodeSSE } from "@/core/sse/encoder";
 import { liveSessionRegistry } from "@/core/session/live-session-registry";
 import { repairSessionIfStale } from "@/core/session/stale-run-recovery";
-import { getSessionDetail } from "@/db/repositories/session-repository";
+import { getOwnedSessionDetail } from "@/db/repositories/session-repository";
 import {
   SESSION_EVENT_TYPE,
   SSE_HEARTBEAT_INTERVAL_MS,
 } from "@/lib/constants";
+import { requireUserId } from "@/lib/auth-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,9 +18,15 @@ export async function GET(
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
-  await repairSessionIfStale(sessionId);
+  const userId = await requireUserId();
 
-  const session = await getSessionDetail(sessionId);
+  let session = await getOwnedSessionDetail(sessionId, userId);
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  await repairSessionIfStale(sessionId);
+  session = await getOwnedSessionDetail(sessionId, userId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }

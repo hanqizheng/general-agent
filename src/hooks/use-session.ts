@@ -2,26 +2,8 @@
 
 import { useCallback, useMemo } from "react";
 
+import { parseJsonResponse } from "@/lib/client-auth";
 import type { SessionDetailDto } from "@/lib/session-dto";
-
-async function parseJsonResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    let parsedMessage = "";
-    try {
-      const parsed = JSON.parse(errorText) as {
-        error?: string;
-        message?: string;
-      };
-      parsedMessage = parsed.message || parsed.error || "";
-    } catch {
-      parsedMessage = "";
-    }
-    throw new Error(parsedMessage || errorText || `Request failed: ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-}
 
 export function useSession(sessionId: string) {
   const refresh = useCallback(async () => {

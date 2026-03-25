@@ -11,13 +11,15 @@ import {
 } from "@/db/repositories/message-repository";
 import { createQueuedRun } from "@/db/repositories/run-repository";
 import {
-  getSessionDetail,
+  getOwnedSessionDetail,
   lockSession,
   markSessionRunState,
 } from "@/db/repositories/session-repository";
 import { prepareSessionRunSetup } from "@/core/session/run-setup";
 import { startSessionRun } from "@/core/session/session-runner";
 import { repairSessionIfStale } from "@/core/session/stale-run-recovery";
+import { requireUserId } from "@/lib/auth-utils";
+import type { SessionDetailDto } from "@/lib/session-dto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,9 +33,15 @@ export async function GET(
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
-  await repairSessionIfStale(sessionId);
+  const userId = await requireUserId();
 
-  const session = await getSessionDetail(sessionId);
+  let session = await getOwnedSessionDetail(sessionId, userId);
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  await repairSessionIfStale(sessionId);
+  session = await getOwnedSessionDetail(sessionId, userId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
@@ -67,7 +75,7 @@ export async function POST(
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
-  await repairSessionIfStale(sessionId);
+  const userId = await requireUserId();
 
   const json = await request.json().catch(() => null);
   const parsed = sendMessageBodySchema.safeParse(json);
@@ -78,7 +86,13 @@ export async function POST(
     );
   }
 
-  const session = await getSessionDetail(sessionId);
+  let session = await getOwnedSessionDetail(sessionId, userId);
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  await repairSessionIfStale(sessionId);
+  session = await getOwnedSessionDetail(sessionId, userId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
@@ -89,6 +103,7 @@ export async function POST(
   let createdUserMessageId: string | null = null;
   let shouldGenerateSessionPresentation = false;
   let responseSession = session;
+  const workspaceRoot = session.workspaceRoot;
 
   try {
     await db.transaction(async (tx) => {
@@ -131,7 +146,7 @@ export async function POST(
         ...responseSession,
         activeRunId: sessionRow.activeRunId,
         status: sessionRow.status,
-      };
+      } as SessionDetailDto;
     });
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "SESSION_NOT_FOUND") {
@@ -164,7 +179,7 @@ export async function POST(
     sessionId,
     runId: createdRunId,
     userMessage: parsed.data.text,
-    workspaceRoot: session.workspaceRoot,
+    workspaceRoot,
     setup,
     generateSessionPresentation: shouldGenerateSessionPresentation,
   }).catch(() => undefined);

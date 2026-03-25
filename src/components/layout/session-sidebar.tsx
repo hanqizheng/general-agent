@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { PanelLeftClose, PanelLeftOpen, Plus, Trash2 } from "lucide-react";
+import { LogOut, PanelLeftClose, PanelLeftOpen, Plus, Trash2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import type { Session } from "next-auth";
+import { signOut } from "next-auth/react";
 
 import { useSessionsContext } from "@/components/providers/sessions-provider";
 import { SESSION_STATUS } from "@/lib/constants";
@@ -12,6 +14,7 @@ interface SessionSidebarProps {
   onDesktopOpenChange: (open: boolean) => void;
   isMobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
+  user: Session["user"];
 }
 
 export function SessionSidebar({
@@ -19,6 +22,7 @@ export function SessionSidebar({
   onDesktopOpenChange,
   isMobileOpen,
   onMobileOpenChange,
+  user,
 }: SessionSidebarProps) {
   const params = useParams<{ sessionId?: string | string[] }>();
   const router = useRouter();
@@ -72,6 +76,9 @@ export function SessionSidebar({
 
     onDesktopOpenChange(false);
   };
+
+  const userLabel = user.name?.trim() || user.email || "Signed in";
+  const userInitial = userLabel.charAt(0).toUpperCase();
 
   return (
     <>
@@ -208,6 +215,47 @@ export function SessionSidebar({
               );
             })}
           </div>
+        </div>
+
+        <div className="border-t border-stone-200/70 bg-white/40 px-4 py-4">
+          <div className="flex items-center gap-3">
+            {user.image ? (
+              // External OAuth avatars are provider-hosted URLs, so keep a plain img here.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                alt={userLabel}
+                className="h-10 w-10 rounded-full object-cover"
+                referrerPolicy="no-referrer"
+                src={user.image}
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-900 text-sm font-semibold text-white">
+                {userInitial}
+              </div>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-stone-900">
+                {userLabel}
+              </div>
+              {user.name && user.email ? (
+                <div className="truncate text-xs text-stone-500">
+                  {user.email}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <button
+            className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-[18px] border border-stone-200 bg-white px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+            onClick={() => {
+              void signOut({ callbackUrl: "/login" });
+            }}
+            type="button"
+          >
+            <LogOut aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+            <span>Sign out</span>
+          </button>
         </div>
       </aside>
     </>

@@ -1,6 +1,9 @@
+import { redirect } from "next/navigation";
+
 import { ChatShell } from "@/components/layout/chat-shell";
-import { SessionsProvider } from "@/components/providers/sessions-provider";
+import { auth } from "@/lib/auth";
 import { listSessionSummaries } from "@/db/repositories/session-repository";
+import { SessionsProvider } from "@/components/providers/sessions-provider";
 
 export const dynamic = "force-dynamic";
 
@@ -9,11 +12,18 @@ export default async function ChatLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const sessions = await listSessionSummaries();
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId || !session.user) {
+    redirect("/login");
+  }
+
+  const sessions = await listSessionSummaries(userId);
 
   return (
     <SessionsProvider initialSessions={sessions}>
-      <ChatShell>{children}</ChatShell>
+      <ChatShell user={session.user}>{children}</ChatShell>
     </SessionsProvider>
   );
 }

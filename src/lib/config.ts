@@ -41,6 +41,11 @@ const envSchema = z.object({
   SESSION_STALE_RUN_MS: z.coerce.number().int().positive().optional(),
   ARTIFACTS_DIR: z.string().min(1).optional(),
 
+  // Auth
+  AUTH_SECRET: z.string().min(1, "AUTH_SECRET is required"),
+  AUTH_GOOGLE_ID: z.string().optional(),
+  AUTH_GOOGLE_SECRET: z.string().optional(),
+
   // Node environment
   NODE_ENV: z
     .enum(["development", "production", "test"])
@@ -49,8 +54,28 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+const nodeEnvSchema = z
+  .enum(["development", "production", "test"])
+  .default("development");
+const DEV_AUTH_SECRET = "local-dev-auth-secret";
+
 function loadEnv(): Env {
-  const result = envSchema.safeParse(process.env);
+  const nodeEnv = nodeEnvSchema.parse(process.env.NODE_ENV);
+  const authSecret =
+    process.env.AUTH_SECRET ||
+    (nodeEnv === "production" ? undefined : DEV_AUTH_SECRET);
+
+  if (!process.env.AUTH_SECRET && nodeEnv !== "production") {
+    console.warn(
+      "AUTH_SECRET is not set. Falling back to a local development secret. Set AUTH_SECRET explicitly for shared or production environments.",
+    );
+  }
+
+  const result = envSchema.safeParse({
+    ...process.env,
+    NODE_ENV: nodeEnv,
+    AUTH_SECRET: authSecret,
+  });
 
   if (!result.success) {
     console.error("Invalid environment variables:");

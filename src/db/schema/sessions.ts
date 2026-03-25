@@ -8,6 +8,7 @@ import {
   textEnumColumn,
   updatedAtColumn,
 } from "./shared";
+import { users } from "./auth";
 
 export const sessions = pgTable(
   "sessions",
@@ -17,6 +18,9 @@ export const sessions = pgTable(
     status: textEnumColumn("status", sessionStatusValues).notNull(),
     activeRunId: text("active_run_id"),
     nextSequence: integer("next_sequence").notNull().default(1),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
     workspaceRoot: text("workspace_root").notNull(),
     lastMessageAt: nullableTimestamp("last_message_at"),
     metadata: metadataJsonColumn("metadata"),
@@ -26,6 +30,11 @@ export const sessions = pgTable(
   },
   (table) => [
     index("sessions_deleted_last_message_idx").on(
+      table.deletedAt,
+      table.lastMessageAt,
+    ),
+    index("sessions_user_deleted_last_message_idx").on(
+      table.userId,
       table.deletedAt,
       table.lastMessageAt,
     ),

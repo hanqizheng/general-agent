@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -155,15 +156,20 @@ export function ChatProvider({
   );
 
   const initialMessageSentRef = useRef(false);
+  const sendPendingMessage = useEffectEvent((text: string) => {
+    void sendMessage(text);
+  });
 
   useEffect(() => {
     if (initialMessageSentRef.current) return;
     const text = consumePendingMessage(session.id);
     if (text) {
       initialMessageSentRef.current = true;
-      void sendMessage(text);
+      queueMicrotask(() => {
+        sendPendingMessage(text);
+      });
     }
-  }, [session.id, sendMessage]);
+  }, [session.id]);
 
   const abort = useCallback(async () => {
     dispatch({ type: CHAT_ACTION_TYPE.CLEAR_REQUEST_ERROR });
