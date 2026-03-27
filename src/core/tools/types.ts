@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { JSONValue } from "@/lib/artifact-types";
+
 /** Tool 对应的风险等级 */
 export type ToolRiskLevel = "low" | "medium" | "high";
 
@@ -17,6 +19,13 @@ export interface ToolResult {
   output: string;
   /** 是否为错误结果 */
   isError: boolean;
+  /** 可选的结构化 artifact */
+  artifacts?: Array<{
+    artifactType: string;
+    data: JSONValue;
+    contractId?: string | null;
+    summaryText?: string | null;
+  }>;
 }
 
 /** Tool 本身的定义 */

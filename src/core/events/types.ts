@@ -1,3 +1,4 @@
+import type { ArtifactPartPayload } from "@/lib/artifact-types";
 import {
   MESSAGE_PART_KIND,
   SESSION_EVENT_TYPE,
@@ -147,6 +148,13 @@ interface ToolEndEvent extends EventBase {
   durationMs: number;
 }
 
+interface ArtifactEvent extends EventBase {
+  type: "message.artifact";
+  messageId: string;
+  partIndex: number;
+  artifact: ArtifactPartPayload;
+}
+
 interface ErrorEvent extends EventBase {
   type: typeof SESSION_EVENT_TYPE.ERROR;
   error: {
@@ -179,5 +187,6 @@ export type AgentEvent =
   | ToolRunningEvent
   | ToolUpdateEvent
   | ToolEndEvent
+  | ArtifactEvent
   | ErrorEvent
   | HeartbeatEvent;

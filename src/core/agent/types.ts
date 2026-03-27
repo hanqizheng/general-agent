@@ -3,6 +3,7 @@ import type { LLMProvider } from "../provider/base";
 
 import type { LoopEndReason } from "../events/types";
 import type { EventEmitter } from "../events/emitter";
+import type { ArtifactContractRegistry } from "../contracts";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolContext } from "../tools/types";
 
@@ -17,6 +18,8 @@ export interface AgentLoopStartParams {
   interruptSignal?: AbortSignal;
   toolRegistry?: ToolRegistry;
   toolContext?: ToolContext;
+  contractRegistry?: ArtifactContractRegistry;
+  targetArtifactContractId?: string | null;
 }
 
 /** Agent Loop 运行结果 */
@@ -33,6 +36,7 @@ export interface TurnParams {
   streamParams: LLMStreamParams;
   toolRegistry?: ToolRegistry;
   toolContext?: ToolContext;
+  contractRegistry?: ArtifactContractRegistry;
 }
 
 /** 一次 Turn 的输出 */

@@ -229,7 +229,7 @@ export async function createMessagePart(
   input: {
     messageId: string;
     partIndex: number;
-    kind: "text" | "reasoning" | "tool_use" | "tool_result";
+    kind: "text" | "reasoning" | "tool_use" | "tool_result" | "artifact";
     payload?: MessagePartPayload;
   },
 ) {

@@ -1,0 +1,37 @@
+{
+  "id": "repo-risk-report@v1",
+  "artifactType": "repo_risk_report",
+  "description": "Structured repository risk report suitable for downstream UI rendering.",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "summary": {
+        "type": "string"
+      },
+      "risks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "severity": {
+              "type": "string"
+            },
+            "details": {
+              "type": "string"
+            },
+            "mitigation": {
+              "type": "string"
+            }
+          },
+          "required": ["title", "severity", "details", "mitigation"]
+        }
+      }
+    },
+    "required": ["summary", "risks"]
+  }
+}

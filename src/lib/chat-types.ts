@@ -9,6 +9,10 @@ import {
   TOOL_END_STATE,
 } from "./constants";
 import { CHAT_ACTION_TYPE, CHAT_TRANSPORT_STATUS } from "./chat-constants";
+import type {
+  ArtifactPartPayload,
+  JSONValue,
+} from "./artifact-types";
 
 export type SessionStatus =
   (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
@@ -74,7 +78,20 @@ export interface UIToolPart extends UIMessagePartBase {
   durationMs?: number;
 }
 
-export type UIMessagePart = UITextPart | UIReasoningPart | UIToolPart;
+export interface UIArtifactPart extends UIMessagePartBase {
+  kind: typeof MESSAGE_PART_KIND.ARTIFACT;
+  artifactType: string | null;
+  contractId: string | null;
+  producer: ArtifactPartPayload["producer"] | null;
+  data: JSONValue | null;
+  summaryText?: string | null;
+}
+
+export type UIMessagePart =
+  | UITextPart
+  | UIReasoningPart
+  | UIToolPart
+  | UIArtifactPart;
 
 export interface UIMessage {
   messageId: string;
@@ -155,6 +172,12 @@ export type ChatAction =
       messageId: string;
       partIndex: number;
       content: string;
+    }
+  | {
+      type: typeof CHAT_ACTION_TYPE.ARTIFACT;
+      messageId: string;
+      partIndex: number;
+      artifact: ArtifactPartPayload;
     }
   | {
       type: typeof CHAT_ACTION_TYPE.TOOL_START;

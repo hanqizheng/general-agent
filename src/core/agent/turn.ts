@@ -3,19 +3,36 @@ import { InterruptedError, isAbortError } from "@/lib/errors";
 import { genMessageId } from "@/lib/id";
 
 import { MESSAGE_PART_END_STATE, TOOL_END_STATE } from "../events/constants";
+import {
+  artifactPayloadToContentBlock,
+  buildArtifactPayload,
+  buildStructuredOutputSummary,
+} from "./artifacts";
 import type {
   MessagePartEndState,
   MessagePartKind,
 } from "../events/types";
 import type { LLMContentBlock } from "../provider/base";
 import type { PendingToolCall, TurnParams, TurnResult } from "./types";
+import {
+  structuredOutputParams,
+  structuredOutputToolName,
+} from "../tools/built-in/structured-output";
+import type { ArtifactPartPayload } from "@/lib/artifact-types";
 
 type StreamPartKind =
   | typeof MESSAGE_PART_KIND.TEXT
   | typeof MESSAGE_PART_KIND.REASONING;
 
 export async function executeTurn(params: TurnParams): Promise<TurnResult> {
-  const { emitter, provider, streamParams, toolRegistry, toolContext } = params;
+  const {
+    emitter,
+    provider,
+    streamParams,
+    toolRegistry,
+    toolContext,
+    contractRegistry,
+  } = params;
   const msgId = genMessageId();
   const interruptSignal = streamParams.signal;
 
@@ -29,20 +46,27 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
   let partIndex = 0;
 
   // 主动通知 UI 一个新的 part 开始了，这样 UI 可以更快地渲染出对应的组件（比如工具调用的组件），而不需要等到第一个 delta 到达时才知道这个 part 的存在
-  const emitPartStart = (kind: MessagePartKind) => {
+  const emitPartStart = (
+    kind: MessagePartKind,
+    customPartIndex = partIndex,
+  ) => {
     emitter.emit({
       type: "message.part.start",
       messageId: msgId,
-      partIndex,
+      partIndex: customPartIndex,
       kind,
     });
   };
 
-  const emitPartEnd = (kind: MessagePartKind, state: MessagePartEndState) => {
+  const emitPartEnd = (
+    kind: MessagePartKind,
+    state: MessagePartEndState,
+    customPartIndex = partIndex,
+  ) => {
     emitter.emit({
       type: "message.part.end",
       messageId: msgId,
-      partIndex,
+      partIndex: customPartIndex,
       kind,
       state,
     });
@@ -174,6 +198,25 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
     });
   };
 
+  const emitArtifactPart = (
+    artifact: ArtifactPartPayload,
+    artifactPartIndex: number,
+  ) => {
+    emitPartStart(MESSAGE_PART_KIND.ARTIFACT, artifactPartIndex);
+    emitter.emit({
+      type: "message.artifact",
+      messageId: msgId,
+      partIndex: artifactPartIndex,
+      artifact,
+    });
+    emitPartEnd(
+      MESSAGE_PART_KIND.ARTIFACT,
+      MESSAGE_PART_END_STATE.COMPLETE,
+      artifactPartIndex,
+    );
+    contentBlocks.push(artifactPayloadToContentBlock(artifact));
+  };
+
   try {
     try {
       const stream = await provider.stream(streamParams);
@@ -247,6 +290,7 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
     flushCurrentPart();
 
     const toolResultBlocks: LLMContentBlock[] = [];
+    let nextArtifactPartIndex = partIndex;
 
     for (const [index, toolCall] of pendingToolCalls.entries()) {
       if (interruptSignal?.aborted) {
@@ -275,6 +319,7 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
       const startTime = Date.now();
       let output = "";
       let isError = false;
+      const producedArtifacts: ArtifactPartPayload[] = [];
 
       ensureNotInterrupted();
 
@@ -284,12 +329,91 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
       } else {
         try {
           ensureNotInterrupted();
-          const tool = toolRegistry.get(toolCall.name);
-          const parsed = tool.parameters.parse(toolCall.input);
-          const result = await tool.execute(parsed, toolContext);
-          ensureNotInterrupted();
-          output = result.output;
-          isError = result.isError;
+          if (toolCall.name === structuredOutputToolName) {
+            if (!contractRegistry) {
+              throw new Error("Artifact contract registry is not configured.");
+            }
+
+            const parsed = structuredOutputParams.parse(toolCall.input);
+            const contract = contractRegistry.get(parsed.contract_id);
+            const currentAssistantContext = contentBlocks.filter(
+              (block) =>
+                block.type !== "tool_use" || block.id !== toolCall.id,
+            );
+            const structuredMessages =
+              currentAssistantContext.length > 0
+                ? [
+                    ...streamParams.messages,
+                    {
+                      role: MESSAGE_ROLE.ASSISTANT,
+                      content: currentAssistantContext,
+                    } as const,
+                  ]
+                : streamParams.messages;
+
+            const result = await provider.generateStructured({
+              messages: structuredMessages,
+              systemPrompt: streamParams.systemPrompt,
+              contract,
+              instruction: parsed.instruction,
+              signal: interruptSignal,
+            });
+
+            ensureNotInterrupted();
+
+            const artifact = buildArtifactPayload(contract, result, {
+              kind: "assistant",
+              name: structuredOutputToolName,
+            });
+
+            producedArtifacts.push(artifact);
+            output = buildStructuredOutputSummary(artifact);
+            isError = false;
+          } else {
+            const tool = toolRegistry.get(toolCall.name);
+            const parsed = tool.parameters.parse(toolCall.input);
+            const result = await tool.execute(parsed, toolContext);
+            ensureNotInterrupted();
+            output = result.output;
+            isError = result.isError;
+
+            for (const artifact of result.artifacts ?? []) {
+              if (artifact.contractId) {
+                if (!contractRegistry) {
+                  throw new Error(
+                    `Artifact contract registry is not configured for "${artifact.contractId}".`,
+                  );
+                }
+
+                const contract = contractRegistry.get(artifact.contractId);
+                producedArtifacts.push(
+                  buildArtifactPayload(
+                    contract,
+                    {
+                      data: artifact.data,
+                      summaryText: artifact.summaryText ?? null,
+                    },
+                    {
+                      kind: "tool",
+                      name: toolCall.name,
+                    },
+                  ),
+                );
+                continue;
+              }
+
+              producedArtifacts.push({
+                artifactType: artifact.artifactType,
+                contractId: artifact.contractId ?? null,
+                producer: {
+                  kind: "tool",
+                  name: toolCall.name,
+                },
+                data: artifact.data,
+                summaryText: artifact.summaryText ?? null,
+              });
+            }
+          }
         } catch (error: unknown) {
           if (interruptSignal?.aborted || isAbortError(error)) {
             interruptToolPart(toolCall, Date.now() - startTime, true);
@@ -331,6 +455,11 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
           ? MESSAGE_PART_END_STATE.ERROR
           : MESSAGE_PART_END_STATE.COMPLETE,
       });
+
+      for (const artifact of producedArtifacts) {
+        emitArtifactPart(artifact, nextArtifactPartIndex);
+        nextArtifactPartIndex += 1;
+      }
 
       toolResultBlocks.push({
         type: "tool_result",

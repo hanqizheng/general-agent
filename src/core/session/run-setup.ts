@@ -1,3 +1,4 @@
+import { getDefaultContractsRoot, loadArtifactContracts } from "@/core/contracts";
 import path from "path";
 import { createHash } from "crypto";
 
@@ -7,6 +8,7 @@ import { buildSystemPrompt } from "@/core/prompt/system";
 import { buildSkillsXml, loadSkills } from "@/core/skills";
 import { createDefaultToolRegistry } from "@/core/tools/default-registry";
 import type { ToolRegistry } from "@/core/tools/registry";
+import type { ArtifactContractRegistry } from "@/core/contracts";
 
 export interface SessionRunSetup {
   provider: LLMProvider;
@@ -15,6 +17,7 @@ export interface SessionRunSetup {
   systemPrompt: string;
   systemPromptHash: string;
   toolRegistry: ToolRegistry;
+  contractRegistry: ArtifactContractRegistry;
 }
 
 function hashPrompt(input: string) {
@@ -26,6 +29,7 @@ export async function prepareSessionRunSetup(
   const { provider, model } = getDefaultProviderConfig();
   const toolRegistry = createDefaultToolRegistry();
   const skillsRoot = path.resolve(process.cwd(), "src/skills");
+  const contractRegistry = await loadArtifactContracts(getDefaultContractsRoot());
   const skills = await loadSkills(skillsRoot);
   const skillsXml = buildSkillsXml(skills);
   const systemPrompt = await buildSystemPrompt({
@@ -40,5 +44,6 @@ export async function prepareSessionRunSetup(
     systemPrompt,
     systemPromptHash: hashPrompt(systemPrompt),
     toolRegistry,
+    contractRegistry,
   };
 }

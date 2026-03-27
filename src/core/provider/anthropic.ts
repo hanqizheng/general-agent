@@ -1,14 +1,21 @@
 // Anthropic provider — standard Anthropic API format
 
 import { ChatAnthropic } from "@langchain/anthropic";
+import { HumanMessage } from "@langchain/core/messages";
 import type { AIMessageChunk } from "@langchain/core/messages";
 import type {
   LLMProvider,
   LLMStreamParams,
   LLMStreamChunk,
+  LLMStructuredGenerationParams,
   LLMToolDefinition,
 } from "./base";
 import { toLangChainMessages } from "./converters";
+import {
+  buildStructuredArtifactInstruction,
+  buildStructuredArtifactSchema,
+  normalizeStructuredArtifactResult,
+} from "./structured";
 
 interface AnthropicProviderOptions {
   apiKey: string;
@@ -63,6 +70,39 @@ export function createAnthropicProvider(
       });
 
       return transformStream(stream);
+    },
+
+    async generateStructured(params: LLMStructuredGenerationParams) {
+      const llm = new ChatAnthropic({
+        apiKey,
+        anthropicApiUrl: baseURL,
+        model: defaultModel,
+        maxTokens: 4096,
+        temperature: 0,
+      });
+
+      const structuredLlm = llm.withStructuredOutput(
+        buildStructuredArtifactSchema(params.contract),
+        {
+          method: "jsonSchema",
+        },
+      );
+
+      const langChainMessages = [
+        ...toLangChainMessages(params.messages, params.systemPrompt),
+        new HumanMessage(
+          buildStructuredArtifactInstruction(
+            params.contract,
+            params.instruction,
+          ),
+        ),
+      ];
+
+      const result = await structuredLlm.invoke(langChainMessages, {
+        signal: params.signal,
+      });
+
+      return normalizeStructuredArtifactResult(result);
     },
   };
 }

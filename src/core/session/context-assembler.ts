@@ -1,4 +1,5 @@
 import type { LLMContentBlock, LLMMessage } from "@/core/provider/base";
+import { artifactPayloadToContentBlock } from "@/core/agent/artifacts";
 import { getCompletedTranscript } from "@/db/repositories/message-repository";
 
 interface TranscriptMessage {
@@ -12,7 +13,7 @@ interface TranscriptMessage {
 interface TranscriptPart {
   messageId: string;
   partIndex: number;
-  kind: "text" | "reasoning" | "tool_use" | "tool_result";
+  kind: "text" | "reasoning" | "tool_use" | "tool_result" | "artifact";
   textContent: string | null;
   payload: Record<string, unknown>;
 }
@@ -58,6 +59,14 @@ function buildVisibleContent(parts: TranscriptPart[]): LLMContentBlock[] {
                 : {},
           });
         }
+        break;
+
+      case "artifact":
+        content.push(
+          artifactPayloadToContentBlock(part.payload as unknown as Parameters<
+            typeof artifactPayloadToContentBlock
+          >[0]),
+        );
         break;
 
       default:

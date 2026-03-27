@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { integer, jsonb, text, timestamp } from "drizzle-orm/pg-core";
 import { MESSAGE_STATUS, SESSION_STATUS } from "@/lib/constants";
+import type { ArtifactPartPayload } from "@/lib/artifact-types";
 
 export const sessionStatusValues = [
   SESSION_STATUS.IDLE,
@@ -28,6 +29,7 @@ export const messagePartKindValues = [
   "reasoning",
   "tool_use",
   "tool_result",
+  "artifact",
 ] as const;
 export const messagePartStateValues = [
   "streaming",
@@ -73,7 +75,8 @@ export type MessagePartPayload =
       durationMs: number | null;
       error: string | null;
       interrupted?: boolean;
-    };
+    }
+  | ArtifactPartPayload;
 
 export function textEnumColumn<TValues extends readonly [string, ...string[]]>(
   name: string,

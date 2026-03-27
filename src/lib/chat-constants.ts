@@ -24,6 +24,7 @@ export const CHAT_ACTION_TYPE = {
   PART_END: "part_end",
   TEXT_DELTA: "text_delta",
   REASONING_DELTA: "reasoning_delta",
+  ARTIFACT: "artifact",
   TOOL_START: "tool_start",
   TOOL_RUNNING: "tool_running",
   TOOL_UPDATE: "tool_update",
