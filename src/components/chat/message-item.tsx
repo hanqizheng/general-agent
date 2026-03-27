@@ -2,20 +2,28 @@
 
 import type { ReactElement } from "react";
 
-import type { UIMessage, UIMessagePart } from "@/lib/chat-types";
+import type {
+  UIArtifactPart,
+  UIMessage,
+  UIMessagePart,
+  UIToolPart,
+} from "@/lib/chat-types";
 import {
   MESSAGE_PART_END_STATE,
   MESSAGE_PART_KIND,
   MESSAGE_ROLE,
   MESSAGE_STATUS,
 } from "@/lib/constants";
+import { stableStringifyJson } from "@/lib/artifact-types";
 
 import { MarkdownRenderer } from "./markdown-renderer";
 import { ReasoningRenderer } from "./reasoning-renderer";
+import { ToolStackRenderer } from "./tool-stack-renderer";
 import { ToolRenderer } from "./tool-renderer";
 
 interface MessageItemProps {
   message: UIMessage;
+  toolContinuationParts?: UIToolPart[];
 }
 
 function getAssistantBadge(message: UIMessage) {
@@ -54,6 +62,27 @@ function renderDetailPart(part: Exclude<UIMessagePart, { kind: "text" }>) {
   }
 }
 
+function isStructuredOutputArtifact(
+  artifact: UIArtifactPart | undefined,
+  tool: UIToolPart | undefined,
+) {
+  return (
+    artifact?.producer?.name === "structured_output" &&
+    tool?.toolName === "structured_output" &&
+    artifact.data !== null
+  );
+}
+
+function mergeStructuredArtifactIntoTool(
+  tool: UIToolPart,
+  artifact: UIArtifactPart,
+): UIToolPart {
+  return {
+    ...tool,
+    output: stableStringifyJson(artifact.data),
+  };
+}
+
 function renderAssistantTextPart(part: Extract<UIMessagePart, { kind: "text" }>) {
   const hasText = part.text.trim().length > 0;
 
@@ -74,7 +103,89 @@ function renderAssistantTextPart(part: Extract<UIMessagePart, { kind: "text" }>)
   );
 }
 
-export function MessageItem({ message }: MessageItemProps) {
+function renderAssistantParts(
+  parts: UIMessagePart[],
+  toolContinuationParts: UIToolPart[] = [],
+) {
+  const rendered: ReactElement[] = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+
+    if (part.kind === MESSAGE_PART_KIND.TEXT) {
+      if (part.text.trim().length === 0 && part.state !== null) {
+        continue;
+      }
+
+      rendered.push(renderAssistantTextPart(part));
+      continue;
+    }
+
+    if (part.kind === MESSAGE_PART_KIND.TOOL) {
+      const toolGroup: UIToolPart[] = [part];
+
+      while (
+        index + 1 < parts.length &&
+        parts[index + 1]?.kind === MESSAGE_PART_KIND.TOOL
+      ) {
+        index += 1;
+        toolGroup.push(parts[index] as UIToolPart);
+      }
+
+      const nextPart = parts[index + 1];
+      const artifactPart =
+        nextPart?.kind === MESSAGE_PART_KIND.ARTIFACT ? nextPart : undefined;
+      const lastTool = toolGroup[toolGroup.length - 1];
+
+      if (isStructuredOutputArtifact(artifactPart, lastTool)) {
+        toolGroup[toolGroup.length - 1] = mergeStructuredArtifactIntoTool(
+          lastTool as UIToolPart,
+          artifactPart as UIArtifactPart,
+        );
+        index += 1;
+      }
+
+      const mergedToolGroup =
+        index === parts.length - 1 && toolContinuationParts.length > 0
+          ? [...toolGroup, ...toolContinuationParts]
+          : toolGroup;
+
+      rendered.push(
+        mergedToolGroup.length > 1 ? (
+          <ToolStackRenderer
+            key={`tool-stack-${toolGroup[0]?.partIndex ?? index}`}
+            parts={mergedToolGroup}
+          />
+        ) : (
+          <ToolRenderer
+            key={`tool-${toolGroup[0]?.partIndex ?? index}`}
+            part={toolGroup[0]}
+          />
+        ),
+      );
+      continue;
+    }
+
+    if (part.kind === MESSAGE_PART_KIND.ARTIFACT) {
+      continue;
+    }
+
+    const renderedPart = renderDetailPart(
+      part as Exclude<UIMessagePart, { kind: "text" }>,
+    );
+
+    if (renderedPart) {
+      rendered.push(renderedPart);
+    }
+  }
+
+  return rendered;
+}
+
+export function MessageItem({
+  message,
+  toolContinuationParts = [],
+}: MessageItemProps) {
   const isUser = message.role === MESSAGE_ROLE.USER;
   const messageWidthClass = isUser
     ? "flex w-fit max-w-full flex-col items-end sm:max-w-[85%] lg:max-w-3xl"
@@ -84,19 +195,10 @@ export function MessageItem({ message }: MessageItemProps) {
       part.kind === MESSAGE_PART_KIND.TEXT,
   );
   const badge = !isUser ? getAssistantBadge(message) : null;
-  const orderedAssistantParts = message.parts
-    .map((part) => {
-      if (part.kind === MESSAGE_PART_KIND.TEXT) {
-        if (part.text.trim().length === 0 && part.state !== null) {
-          return null;
-        }
-
-        return renderAssistantTextPart(part);
-      }
-
-      return renderDetailPart(part);
-    })
-    .filter((part): part is ReactElement => part !== null);
+  const orderedAssistantParts = renderAssistantParts(
+    message.parts,
+    toolContinuationParts,
+  );
   const hasAssistantContent = orderedAssistantParts.length > 0;
 
   return (
