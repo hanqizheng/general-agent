@@ -42,6 +42,7 @@ export const MESSAGE_PART_KIND = {
   TEXT: "text",
   REASONING: "reasoning",
   TOOL: "tool",
+  ARTIFACT: "artifact",
 } as const;
 
 // ─── 共享状态常量（前后端都会用到）──────────────

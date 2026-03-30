@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { UIMessage } from "@/lib/chat-types";
+import type { UIMessage, UIMessagePart, UIToolPart } from "@/lib/chat-types";
+import { MESSAGE_PART_KIND, MESSAGE_ROLE } from "@/lib/constants";
 
 import { MessageItem } from "./message-item";
 
@@ -11,6 +12,92 @@ interface MessageListProps {
   isLoadingMore: boolean;
   messages: UIMessage[];
   onLoadOlder: () => void | Promise<void>;
+}
+
+interface MessageListEntry {
+  id: string;
+  message: UIMessage;
+  toolContinuationParts: UIToolPart[];
+}
+
+function isVisibleTextPart(part: UIMessagePart) {
+  return part.kind === MESSAGE_PART_KIND.TEXT && part.text.trim().length > 0;
+}
+
+function isToolOnlyAssistantMessage(message: UIMessage) {
+  if (message.role !== MESSAGE_ROLE.ASSISTANT) {
+    return false;
+  }
+
+  let hasTool = false;
+
+  for (const part of message.parts) {
+    if (part.kind === MESSAGE_PART_KIND.TOOL) {
+      hasTool = true;
+      continue;
+    }
+
+    if (isVisibleTextPart(part)) {
+      return false;
+    }
+
+    if (part.kind !== MESSAGE_PART_KIND.TEXT) {
+      return false;
+    }
+  }
+
+  return hasTool;
+}
+
+function collectToolParts(message: UIMessage) {
+  return message.parts.filter(
+    (part): part is UIToolPart => part.kind === MESSAGE_PART_KIND.TOOL,
+  );
+}
+
+function hasTrailingToolSequence(message: UIMessage) {
+  if (message.role !== MESSAGE_ROLE.ASSISTANT || message.parts.length === 0) {
+    return false;
+  }
+
+  return message.parts[message.parts.length - 1]?.kind === MESSAGE_PART_KIND.TOOL;
+}
+
+function buildEntries(messages: UIMessage[]): MessageListEntry[] {
+  const entries: MessageListEntry[] = [];
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index] as UIMessage;
+
+    if (!hasTrailingToolSequence(message)) {
+      entries.push({
+        id: message.messageId,
+        message,
+        toolContinuationParts: [],
+      });
+      continue;
+    }
+
+    const toolContinuationParts: UIToolPart[] = [];
+
+    while (
+      index + 1 < messages.length &&
+      isToolOnlyAssistantMessage(messages[index + 1] as UIMessage)
+    ) {
+      index += 1;
+      toolContinuationParts.push(
+        ...collectToolParts(messages[index] as UIMessage),
+      );
+    }
+
+    entries.push({
+      id: message.messageId,
+      message,
+      toolContinuationParts,
+    });
+  }
+
+  return entries;
 }
 
 export function MessageList({
@@ -22,6 +109,7 @@ export function MessageList({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const [stickToBottom, setStickToBottom] = useState(true);
+  const entries = buildEntries(messages);
 
   useEffect(() => {
     if (!stickToBottom) {
@@ -90,8 +178,12 @@ export function MessageList({
           </div>
         ) : null}
 
-        {messages.map((message) => (
-          <MessageItem key={message.messageId} message={message} />
+        {entries.map((entry) => (
+          <MessageItem
+            key={entry.id}
+            message={entry.message}
+            toolContinuationParts={entry.toolContinuationParts}
+          />
         ))}
 
         <div ref={bottomRef} />

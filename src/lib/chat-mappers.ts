@@ -6,6 +6,7 @@ import {
 } from "./constants";
 import { CHAT_TRANSPORT_STATUS } from "./chat-constants";
 import type { ChatState, UIMessage, UIMessagePart } from "./chat-types";
+import type { ArtifactPartPayload, JSONValue } from "./artifact-types";
 import type {
   SessionDetailDto,
   SessionMessagesPageDto,
@@ -33,6 +34,37 @@ function mapTranscriptPartToUiPart(part: TranscriptPartDto): UIMessagePart {
       partIndex: part.partIndex,
       state: mapPartState(part.state),
       text: part.textContent ?? "",
+    };
+  }
+
+  if (part.kind === MESSAGE_PART_KIND.ARTIFACT) {
+    const payload = part.payload as Partial<ArtifactPartPayload>;
+    const producer =
+      payload.producer &&
+      typeof payload.producer === "object" &&
+      typeof payload.producer.kind === "string"
+        ? {
+            kind: payload.producer.kind,
+            ...(typeof payload.producer.name === "string"
+              ? { name: payload.producer.name }
+              : {}),
+          }
+        : null;
+
+    return {
+      kind: MESSAGE_PART_KIND.ARTIFACT,
+      partIndex: part.partIndex,
+      state: mapPartState(part.state),
+      artifactType:
+        typeof payload.artifactType === "string" ? payload.artifactType : null,
+      contractId:
+        typeof payload.contractId === "string" ? payload.contractId : null,
+      producer,
+      data: (payload.data ?? null) as JSONValue | null,
+      summaryText:
+        typeof payload.summaryText === "string"
+          ? payload.summaryText
+          : part.textContent ?? null,
     };
   }
 

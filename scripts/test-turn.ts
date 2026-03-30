@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { z } from "zod";
 
+import { ArtifactContractRegistry } from "../src/core/contracts";
 import { executeTurn } from "../src/core/agent/turn";
 import { EventBus } from "../src/core/events/bus";
 import { EventEmitter } from "../src/core/events/emitter";
@@ -15,11 +16,13 @@ import type {
   LLMProvider,
   LLMStreamChunk,
 } from "../src/core/provider/base";
+import type { StructuredArtifactResult } from "../src/core/contracts";
 import { ToolRegistry } from "../src/core/tools/registry";
 
 interface ScenarioOptions {
   chunks: LLMStreamChunk[];
   throwAfterChunks?: Error;
+  structuredResult?: StructuredArtifactResult;
 }
 
 interface ExecuteScenarioOptions extends ScenarioOptions {
@@ -30,6 +33,7 @@ interface ExecuteScenarioOptions extends ScenarioOptions {
       isError?: boolean;
     };
   };
+  contractRegistry?: ArtifactContractRegistry;
 }
 
 function createMockProvider(options: ScenarioOptions): LLMProvider {
@@ -47,6 +51,14 @@ function createMockProvider(options: ScenarioOptions): LLMProvider {
       }
 
       return gen();
+    },
+    async generateStructured() {
+      return (
+        options.structuredResult ?? {
+          data: { ok: true },
+          summaryText: "Structured artifact generated",
+        }
+      );
     },
   };
 }
@@ -91,6 +103,9 @@ function summarizeEvent(event: AgentEvent): string {
     case "message.tool.end":
       return `${event.type}#${event.partIndex}:${event.state}`;
 
+    case "message.artifact":
+      return `${event.type}#${event.partIndex}`;
+
     default:
       return event.type;
   }
@@ -117,6 +132,7 @@ async function executeScenario(options: ExecuteScenarioOptions) {
       },
       toolRegistry,
       toolContext: { workspaceRoot: process.cwd() },
+      contractRegistry: options.contractRegistry,
     });
 
     return {
@@ -299,6 +315,99 @@ async function runToolToToolScenario() {
   );
 }
 
+async function runStructuredOutputScenario() {
+  const contractRegistry = new ArtifactContractRegistry();
+  contractRegistry.register({
+    id: "repo-risk-report@v1",
+    artifactType: "repo_risk_report",
+    schema: {
+      type: "object",
+      required: ["summary"],
+      properties: {
+        summary: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  });
+
+  const scenario = await executeScenario({
+    chunks: [
+      {
+        type: "tool_use",
+        id: "tc_structured",
+        name: "structured_output",
+        input: {
+          contract_id: "repo-risk-report@v1",
+          instruction: "Summarize the repository risks.",
+        },
+      },
+    ],
+    contractRegistry,
+    structuredResult: {
+      data: {
+        summary: "Two high-priority repository risks were identified.",
+      },
+      summaryText: "Two high-priority risks identified.",
+    },
+  });
+
+  if (!scenario.ok) {
+    throw scenario.error;
+  }
+
+  assertSequence(
+    scenario.events,
+    [
+      "message.start",
+      "message.part.start#0:tool",
+      "message.tool.start#0",
+      "message.tool.running#0",
+      `message.tool.end#0:${TOOL_END_STATE.COMPLETE}`,
+      `message.part.end#0:${MESSAGE_PART_KIND.TOOL}:${MESSAGE_PART_END_STATE.COMPLETE}`,
+      "message.part.start#1:artifact",
+      "message.artifact#1",
+      `message.part.end#1:${MESSAGE_PART_KIND.ARTIFACT}:${MESSAGE_PART_END_STATE.COMPLETE}`,
+      "message.end",
+    ],
+    "structured output",
+  );
+
+  assert.deepEqual(scenario.result.assistantMessage.content, [
+    {
+      type: "tool_use",
+      id: "tc_structured",
+      name: "structured_output",
+      input: {
+        contract_id: "repo-risk-report@v1",
+        instruction: "Summarize the repository risks.",
+      },
+    },
+    {
+      type: "artifact",
+      artifactType: "repo_risk_report",
+      contractId: "repo-risk-report@v1",
+      producer: {
+        kind: "assistant",
+        name: "structured_output",
+      },
+      data: {
+        summary: "Two high-priority repository risks were identified.",
+      },
+      summaryText: "Two high-priority risks identified.",
+    },
+  ]);
+
+  assert.deepEqual(scenario.result.toolResultMessage?.content, [
+    {
+      type: "tool_result",
+      toolCallId: "tc_structured",
+      content:
+        'Generated structured artifact "repo-risk-report@v1": Two high-priority risks identified.',
+      isError: false,
+    },
+  ]);
+}
+
 async function runStreamErrorScenario() {
   const scenario = await executeScenario({
     chunks: [{ type: "text_delta", text: "partial" }],
@@ -371,6 +480,7 @@ async function main() {
     ["reasoning -> text", runReasoningToTextScenario],
     ["text -> tool", runTextToToolScenario],
     ["tool -> tool", runToolToToolScenario],
+    ["structured output", runStructuredOutputScenario],
     ["stream error", runStreamErrorScenario],
     ["tool declared then stream error", runToolDeclaredThenStreamErrorScenario],
   ];

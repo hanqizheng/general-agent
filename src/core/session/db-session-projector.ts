@@ -82,6 +82,15 @@ export class DbSessionProjector {
         });
         break;
 
+      case "message.artifact":
+        await updateMessagePart(db, {
+          messageId: event.messageId,
+          partIndex: event.partIndex,
+          payload: event.artifact,
+          textContent: event.artifact.summaryText ?? null,
+        });
+        break;
+
       case "message.text.delta":
         await appendMessagePartText(db, {
           messageId: event.messageId,

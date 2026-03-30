@@ -19,6 +19,7 @@ import {
 import type {
   ChatState,
   MessagePartEndState,
+  UIArtifactPart,
   UIReasoningPart,
   UITextPart,
   UIToolPart,
@@ -84,6 +85,22 @@ function createToolPart(
   };
 }
 
+function createArtifactPart(
+  partIndex: number,
+  state: MessagePartEndState | null = null,
+): UIArtifactPart {
+  return {
+    kind: MESSAGE_PART_KIND.ARTIFACT,
+    partIndex,
+    state,
+    artifactType: null,
+    contractId: null,
+    producer: null,
+    data: null,
+    summaryText: null,
+  };
+}
+
 function createMessagePart(
   partIndex: number,
   kind: UIMessagePart["kind"],
@@ -95,6 +112,8 @@ function createMessagePart(
       return createReasoningPart(partIndex);
     case MESSAGE_PART_KIND.TOOL:
       return createToolPart(partIndex);
+    case MESSAGE_PART_KIND.ARTIFACT:
+      return createArtifactPart(partIndex);
     default:
       return assertNever(kind);
   }
@@ -173,6 +192,20 @@ function upsertToolPart(
     current?.kind === MESSAGE_PART_KIND.TOOL
       ? current
       : createToolPart(partIndex);
+
+  return replaceOrAppendPart(message, updater(base));
+}
+
+function upsertArtifactPart(
+  message: UIMessage,
+  partIndex: number,
+  updater: (part: UIArtifactPart) => UIArtifactPart,
+): UIMessage {
+  const current = message.parts.find((part) => part.partIndex === partIndex);
+  const base =
+    current?.kind === MESSAGE_PART_KIND.ARTIFACT
+      ? current
+      : createArtifactPart(partIndex);
 
   return replaceOrAppendPart(message, updater(base));
 }
@@ -429,6 +462,15 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
               status: nextStatus,
             };
 
+          case MESSAGE_PART_KIND.ARTIFACT:
+            return {
+              ...upsertArtifactPart(message, action.partIndex, (part) => ({
+                ...part,
+                state: action.state,
+              })),
+              status: nextStatus,
+            };
+
           default:
             return assertNever(action.kind);
         }
@@ -447,6 +489,18 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         upsertReasoningPart(message, action.partIndex, (part) => ({
           ...part,
           text: part.text + action.content,
+        })),
+      );
+
+    case CHAT_ACTION_TYPE.ARTIFACT:
+      return upsertAssistantMessage(state, action.messageId, (message) =>
+        upsertArtifactPart(message, action.partIndex, (part) => ({
+          ...part,
+          artifactType: action.artifact.artifactType,
+          contractId: action.artifact.contractId ?? null,
+          producer: action.artifact.producer,
+          data: action.artifact.data,
+          summaryText: action.artifact.summaryText ?? null,
         })),
       );
 

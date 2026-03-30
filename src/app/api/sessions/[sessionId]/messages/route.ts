@@ -26,6 +26,12 @@ export const dynamic = "force-dynamic";
 
 const sendMessageBodySchema = z.object({
   text: z.string().trim().min(1).max(100_000),
+  format: z
+    .object({
+      type: z.literal("artifact_contract"),
+      contractId: z.string().trim().min(1),
+    })
+    .optional(),
 });
 
 export async function GET(
@@ -98,6 +104,17 @@ export async function POST(
   }
 
   const setup = await prepareSessionRunSetup(session.workspaceRoot);
+  const targetArtifactContractId = parsed.data.format?.contractId ?? null;
+
+  if (
+    targetArtifactContractId &&
+    !setup.contractRegistry.has(targetArtifactContractId)
+  ) {
+    return NextResponse.json(
+      { error: `Unknown artifact contract: ${targetArtifactContractId}` },
+      { status: 400 },
+    );
+  }
 
   let createdRunId: string | null = null;
   let createdUserMessageId: string | null = null;
@@ -182,6 +199,7 @@ export async function POST(
     workspaceRoot,
     setup,
     generateSessionPresentation: shouldGenerateSessionPresentation,
+    targetArtifactContractId,
   }).catch(() => undefined);
 
   return NextResponse.json(

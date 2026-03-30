@@ -7,6 +7,7 @@ import {
   SystemMessage,
 } from "@langchain/core/messages";
 import type { LLMMessage } from "./base";
+import { artifactPayloadToContextText } from "@/lib/artifact-types";
 
 type LangChainMessage = HumanMessage | AIMessage | ToolMessage | SystemMessage;
 
@@ -65,6 +66,8 @@ export function toLangChainMessages(
         } else if (block.type === "reasoning") {
           // reasoning 不传给 LangChain，它是展示给用户的，不参与消息历史
           // LangChain 的 AIMessage 没有 reasoning 字段
+        } else if (block.type === "artifact") {
+          contentParts.push(artifactPayloadToContextText(block));
         } else if (block.type === "tool_use") {
           toolCalls.push({
             id: block.id,

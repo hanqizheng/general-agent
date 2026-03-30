@@ -6,6 +6,7 @@ import { grepTool } from "./built-in/grep";
 import { readTool } from "./built-in/read";
 import { createWebSearchTool } from "./built-in/web-search";
 import { writeTool } from "./built-in/write";
+import { structuredOutputTool } from "./built-in/structured-output";
 
 import { env } from "@/lib/config";
 
@@ -17,6 +18,7 @@ export function createDefaultToolRegistry() {
   toolRegistry.register(bashTool);
   toolRegistry.register(grepTool);
   toolRegistry.register(globTool);
+  toolRegistry.register(structuredOutputTool);
 
   if (env.GEMINI_API_KEY) {
     toolRegistry.register(

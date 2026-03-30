@@ -21,6 +21,7 @@ interface StartSessionRunParams {
   workspaceRoot: string;
   setup: SessionRunSetup;
   generateSessionPresentation?: boolean;
+  targetArtifactContractId?: string | null;
 }
 
 function getTerminalStatus(
@@ -77,6 +78,8 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
         userMessage: params.userMessage,
         history,
         interruptSignal: abortController.signal,
+        contractRegistry: params.setup.contractRegistry,
+        targetArtifactContractId: params.targetArtifactContractId ?? null,
         toolContext: {
           workspaceRoot: params.workspaceRoot,
           signal: abortController.signal,

@@ -10,6 +10,7 @@ import {
   CHAT_ACTION_TYPE,
   CHAT_TRANSPORT_STATUS,
 } from "@/lib/chat-constants";
+import type { ArtifactPartPayload } from "@/lib/artifact-types";
 import type {
   ChatAction,
   LoopEndReason,
@@ -304,6 +305,15 @@ function dispatchSSEEvent(
         messageId: data.messageId as string,
         partIndex: data.partIndex as number,
         content: data.content as string,
+      });
+      break;
+
+    case "message.artifact":
+      dispatch({
+        type: CHAT_ACTION_TYPE.ARTIFACT,
+        messageId: data.messageId as string,
+        partIndex: data.partIndex as number,
+        artifact: data.artifact as ArtifactPartPayload,
       });
       break;
 

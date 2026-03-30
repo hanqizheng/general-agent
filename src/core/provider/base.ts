@@ -8,6 +8,8 @@
  *  2. 拿回：一个异步可迭代的流，逐块吐出 LLM 的响应
  */
 
+import type { ArtifactContract, StructuredArtifactResult } from "@/core/contracts";
+import type { ArtifactPartPayload } from "@/lib/artifact-types";
 import type { MessageRole } from "@/lib/types";
 
 /**
@@ -16,6 +18,9 @@ import type { MessageRole } from "@/lib/types";
 export type LLMContentBlock =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
+  | ({
+      type: "artifact";
+    } & ArtifactPartPayload)
   | {
       type: "tool_use";
       id: string;
@@ -48,6 +53,14 @@ export interface LLMStreamParams {
   tools?: LLMToolDefinition[];
   temperature?: number;
   maxTokens?: number;
+  signal?: AbortSignal;
+}
+
+export interface LLMStructuredGenerationParams {
+  messages: LLMMessage[];
+  systemPrompt: string;
+  contract: ArtifactContract;
+  instruction?: string;
   signal?: AbortSignal;
 }
 
@@ -84,4 +97,7 @@ export interface LLMProvider {
   name: string;
   /** 接收参数，返回一个异步可迭代对象。Agent Loop 用 for await (const chunk of stream) 逐块消费 */
   stream(params: LLMStreamParams): Promise<AsyncIterable<LLMStreamChunk>>;
+  generateStructured(
+    params: LLMStructuredGenerationParams,
+  ): Promise<StructuredArtifactResult>;
 }
