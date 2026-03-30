@@ -4,13 +4,16 @@ import fs from "node:fs";
 import { db } from "@/db";
 import {
   createAttachmentBinding,
+  expireAttachmentBindings,
   findReusableAttachmentBinding,
-  listSessionAttachmentBindings,
+  listAttachmentBindingsByAttachmentIds,
   updateAttachmentBinding,
 } from "@/db/repositories/attachment-binding-repository";
 import {
   getAttachmentById,
+  listAttachmentsByIds,
   listSessionAttachments,
+  markAttachmentsExpired,
   markAttachmentStatus,
 } from "@/db/repositories/attachment-repository";
 import type { LLMContentBlock, LLMMessage } from "@/core/provider/base";
@@ -34,6 +37,9 @@ interface ResolveAttachmentContext {
   provider: string;
   modelFamily: string;
 }
+
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type DbExecutor = typeof db | DbTransaction;
 
 function getAnthropicClient() {
   if (!env.ANTHROPIC_AUTH_TOKEN || !env.ANTHROPIC_BASE_URL) {
@@ -340,33 +346,49 @@ async function createInlineBase64AttachmentBindingSource(
 }
 
 export async function cleanupSessionAttachments(sessionId: string) {
+  const attachments = await listSessionAttachments(sessionId);
+  const attachmentIds = attachments.map((attachment) => attachment.id);
+
+  await db.transaction(async (tx) => {
+    await expireAttachmentsInStore(tx, attachmentIds);
+  });
+  await purgeAttachmentResourcesByIds(attachmentIds);
+}
+
+export async function expireAttachmentsInStore(
+  executor: DbExecutor,
+  attachmentIds: string[],
+) {
+  if (attachmentIds.length === 0) {
+    return;
+  }
+
+  await expireAttachmentBindings(executor, attachmentIds);
+  await markAttachmentsExpired(executor, attachmentIds);
+}
+
+export async function purgeAttachmentResourcesByIds(attachmentIds: string[]) {
+  if (attachmentIds.length === 0) {
+    return;
+  }
+
   const client =
     env.ANTHROPIC_AUTH_TOKEN && env.ANTHROPIC_BASE_URL ? getAnthropicClient() : null;
-  const rows = await listSessionAttachmentBindings(sessionId);
-  const attachments = await listSessionAttachments(sessionId);
+  const [bindings, attachments] = await Promise.all([
+    listAttachmentBindingsByAttachmentIds(attachmentIds),
+    listAttachmentsByIds(attachmentIds),
+  ]);
   const removedStorageKeys = new Set<string>();
 
-  for (const row of rows) {
+  for (const binding of bindings) {
     if (
       client &&
-      row.binding.provider === ATTACHMENT_PROVIDER.ANTHROPIC &&
-      row.binding.bindingMethod === ATTACHMENT_BINDING_METHOD.PROVIDER_FILE_ID &&
-      row.binding.remoteRef
+      binding.provider === ATTACHMENT_PROVIDER.ANTHROPIC &&
+      binding.bindingMethod === ATTACHMENT_BINDING_METHOD.PROVIDER_FILE_ID &&
+      binding.remoteRef
     ) {
-      try {
-        await client.beta.files.delete(row.binding.remoteRef);
-      } catch {
-        // Best effort cleanup only.
-      }
+      await client.beta.files.delete(binding.remoteRef).catch(() => undefined);
     }
-
-    await db.transaction(async (tx) => {
-      await updateAttachmentBinding(tx, {
-        bindingId: row.binding.id,
-        status: ATTACHMENT_BINDING_STATUS.EXPIRED,
-      });
-      await markAttachmentStatus(tx, row.attachment.id, ATTACHMENT_STATUS.EXPIRED);
-    });
   }
 
   for (const attachment of attachments) {

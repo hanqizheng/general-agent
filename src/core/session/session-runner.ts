@@ -13,6 +13,8 @@ import { markSessionRunState } from "@/db/repositories/session-repository";
 import { MESSAGE_STATUS, SESSION_STATUS } from "@/lib/constants";
 import { AppError } from "@/lib/errors";
 import {
+  expireAttachmentsInStore,
+  purgeAttachmentResourcesByIds,
   resolveLLMMessagesAttachments,
   resolveLLMMessageAttachments,
 } from "@/core/attachments/binding-service";
@@ -24,6 +26,7 @@ import {
 } from "./context-assembler";
 import { maybeGenerateSessionPresentation } from "./presentation-generator";
 import type { SessionRunSetup } from "./run-setup";
+import type { TranscriptMessageDto } from "@/lib/session-dto";
 
 interface StartSessionRunParams {
   sessionId: string;
@@ -54,6 +57,18 @@ function getTerminalStatus(
   return "completed" as const;
 }
 
+function extractAttachmentIds(message: TranscriptMessageDto) {
+  return Array.from(
+    new Set(
+      message.parts.flatMap((part) =>
+        part.kind === "attachment" && typeof part.payload.attachmentId === "string"
+          ? [part.payload.attachmentId]
+          : [],
+      ),
+    ),
+  );
+}
+
 export function startSessionRun(params: StartSessionRunParams): Promise<void> {
   const abortController = new AbortController();
   const bus = new EventBus();
@@ -62,6 +77,7 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
 
   let projectionQueue: Promise<void> = Promise.resolve();
   let loopStarted = false;
+  let requestAttachmentIds: string[] = [];
 
   bus.on((event) => {
     liveSessionRegistry.broadcast(params.sessionId, event);
@@ -83,6 +99,7 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
       });
 
       const requestMessage = await hydrateMessageById(params.requestMessageId);
+      requestAttachmentIds = extractAttachmentIds(requestMessage);
       const currentUserMessage = transcriptMessageToLLMMessage(requestMessage);
       if (!currentUserMessage || currentUserMessage.role !== "user") {
         throw new AppError(
@@ -152,7 +169,10 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
           null,
           status === "failed" ? SESSION_STATUS.ERROR : SESSION_STATUS.IDLE,
         );
+        await expireAttachmentsInStore(tx, requestAttachmentIds);
       });
+
+      await purgeAttachmentResourcesByIds(requestAttachmentIds).catch(() => undefined);
 
       if (params.generateSessionPresentation && status === "completed") {
         void maybeGenerateSessionPresentation({
@@ -206,7 +226,10 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
           null,
           status === "failed" ? SESSION_STATUS.ERROR : SESSION_STATUS.IDLE,
         );
+        await expireAttachmentsInStore(tx, requestAttachmentIds);
       });
+
+      await purgeAttachmentResourcesByIds(requestAttachmentIds).catch(() => undefined);
     } finally {
       liveSessionRegistry.complete(params.sessionId);
       bus.dispose();

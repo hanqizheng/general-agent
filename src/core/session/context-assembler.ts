@@ -1,5 +1,6 @@
 import type { LLMContentBlock, LLMMessage } from "@/core/provider/base";
 import { artifactPayloadToContentBlock } from "@/core/agent/artifacts";
+import { listSessionActiveAttachments } from "@/db/repositories/attachment-repository";
 import { getCompletedTranscript } from "@/db/repositories/message-repository";
 import type {
   TranscriptMessageDto,
@@ -35,6 +36,7 @@ function sortParts<T extends { partIndex: number }>(parts: T[]) {
 
 export function buildVisibleContent(
   parts: ContentTranscriptPart[],
+  options?: { replayableAttachmentIds?: Set<string> },
 ): LLMContentBlock[] {
   const content: LLMContentBlock[] = [];
 
@@ -51,6 +53,8 @@ export function buildVisibleContent(
         const payload = (part.payload ?? {}) as Partial<AttachmentPartPayload>;
         if (
           typeof payload.attachmentId === "string" &&
+          (!options?.replayableAttachmentIds ||
+            options.replayableAttachmentIds.has(payload.attachmentId)) &&
           payload.kind === "document" &&
           typeof payload.mimeType === "string"
         ) {
@@ -154,6 +158,9 @@ export async function assembleSessionContext(
   options?: { excludeMessageId?: string | null },
 ): Promise<LLMMessage[]> {
   const transcript = await getCompletedTranscript(sessionId);
+  const replayableAttachmentIds = new Set(
+    (await listSessionActiveAttachments(sessionId)).map((attachment) => attachment.id),
+  );
   const partsByMessageId = new Map<string, TranscriptPart[]>();
   const toolResultsByTurn = new Map<string, LLMContentBlock[]>();
 
@@ -184,7 +191,9 @@ export async function assembleSessionContext(
     }
 
     const parts = partsByMessageId.get(message.id) ?? [];
-    const content = buildVisibleContent(parts);
+    const content = buildVisibleContent(parts, {
+      replayableAttachmentIds,
+    });
 
     if (message.role === "user") {
       result.push({

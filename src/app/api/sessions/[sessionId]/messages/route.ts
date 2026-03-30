@@ -11,7 +11,7 @@ import {
   insertVisibleUserMessage,
 } from "@/db/repositories/message-repository";
 import {
-  listSessionAttachments,
+  listSessionActiveAttachments,
   listSessionAttachmentsByIds,
 } from "@/db/repositories/attachment-repository";
 import { createQueuedRun } from "@/db/repositories/run-repository";
@@ -153,7 +153,7 @@ export async function POST(
   const sessionAttachments =
     setup.providerName === "anthropic"
       ? requestedAttachments
-      : await listSessionAttachments(sessionId);
+      : await listSessionActiveAttachments(sessionId);
 
   const unsupportedAttachment = sessionAttachments.find(
     (attachment) =>

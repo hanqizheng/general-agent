@@ -1,7 +1,8 @@
-import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 
 import { db } from "@/db";
 import { attachmentBindings, attachments } from "@/db/schema";
+import { ATTACHMENT_BINDING_STATUS } from "@/lib/attachment-constants";
 import type {
   AttachmentBindingMethodValue,
   AttachmentBindingProviderValue,
@@ -143,4 +144,45 @@ export async function listSessionAttachmentBindings(sessionId: string) {
         isNull(attachmentBindings.deletedAt),
       ),
     );
+}
+
+export async function listAttachmentBindingsByAttachmentIds(
+  attachmentIds: string[],
+) {
+  if (attachmentIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select()
+    .from(attachmentBindings)
+    .where(
+      and(
+        inArray(attachmentBindings.attachmentId, attachmentIds),
+        isNull(attachmentBindings.deletedAt),
+      ),
+    );
+}
+
+export async function expireAttachmentBindings(
+  executor: DbExecutor,
+  attachmentIds: string[],
+) {
+  if (attachmentIds.length === 0) {
+    return [];
+  }
+
+  return executor
+    .update(attachmentBindings)
+    .set({
+      status: ATTACHMENT_BINDING_STATUS.EXPIRED,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        inArray(attachmentBindings.attachmentId, attachmentIds),
+        isNull(attachmentBindings.deletedAt),
+      ),
+    )
+    .returning();
 }

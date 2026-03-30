@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import { attachments } from "@/db/schema";
+import { ATTACHMENT_STATUS } from "@/lib/attachment-constants";
 import type {
   AttachmentKindValue,
   AttachmentMimeTypeValue,
@@ -12,6 +13,10 @@ import { genAttachmentId } from "@/lib/id";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbExecutor = typeof db | DbTransaction;
+const activeAttachmentStatuses = [
+  ATTACHMENT_STATUS.PENDING,
+  ATTACHMENT_STATUS.BOUND,
+] as const;
 
 export async function createAttachment(
   executor: DbExecutor,
@@ -102,6 +107,20 @@ export async function listSessionAttachmentsByIds(
       and(
         eq(attachments.sessionId, sessionId),
         inArray(attachments.id, attachmentIds),
+        inArray(attachments.status, activeAttachmentStatuses),
+        isNull(attachments.deletedAt),
+      ),
+    );
+}
+
+export async function listSessionActiveAttachments(sessionId: string) {
+  return db
+    .select()
+    .from(attachments)
+    .where(
+      and(
+        eq(attachments.sessionId, sessionId),
+        inArray(attachments.status, activeAttachmentStatuses),
         isNull(attachments.deletedAt),
       ),
     );
@@ -112,6 +131,19 @@ export async function listSessionAttachments(sessionId: string) {
     .select()
     .from(attachments)
     .where(and(eq(attachments.sessionId, sessionId), isNull(attachments.deletedAt)));
+}
+
+export async function listAttachmentsByIds(attachmentIds: string[]) {
+  if (attachmentIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select()
+    .from(attachments)
+    .where(
+      and(inArray(attachments.id, attachmentIds), isNull(attachments.deletedAt)),
+    );
 }
 
 export async function markAttachmentStatus(
@@ -129,4 +161,27 @@ export async function markAttachmentStatus(
     .returning();
 
   return row ?? null;
+}
+
+export async function markAttachmentsExpired(
+  executor: DbExecutor,
+  attachmentIds: string[],
+) {
+  if (attachmentIds.length === 0) {
+    return [];
+  }
+
+  return executor
+    .update(attachments)
+    .set({
+      status: ATTACHMENT_STATUS.EXPIRED,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        inArray(attachments.id, attachmentIds),
+        isNull(attachments.deletedAt),
+      ),
+    )
+    .returning();
 }
