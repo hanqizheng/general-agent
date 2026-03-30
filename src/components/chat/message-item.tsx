@@ -16,6 +16,7 @@ import {
 } from "@/lib/constants";
 import { stableStringifyJson } from "@/lib/artifact-types";
 
+import { ArtifactRenderer } from "./artifact-renderer";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { ReasoningRenderer } from "./reasoning-renderer";
 import { ToolStackRenderer } from "./tool-stack-renderer";
@@ -57,6 +58,8 @@ function renderDetailPart(part: Exclude<UIMessagePart, { kind: "text" }>) {
       return <ReasoningRenderer key={`reasoning-${part.partIndex}`} part={part} />;
     case MESSAGE_PART_KIND.TOOL:
       return <ToolRenderer key={`tool-${part.partIndex}`} part={part} />;
+    case MESSAGE_PART_KIND.ARTIFACT:
+      return <ArtifactRenderer key={`artifact-${part.partIndex}`} part={part} />;
     default:
       return null;
   }
@@ -163,10 +166,6 @@ function renderAssistantParts(
           />
         ),
       );
-      continue;
-    }
-
-    if (part.kind === MESSAGE_PART_KIND.ARTIFACT) {
       continue;
     }
 
