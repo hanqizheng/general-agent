@@ -1,0 +1,165 @@
+import { createHash } from "node:crypto";
+
+import { db } from "@/db";
+import { createAttachment } from "@/db/repositories/attachment-repository";
+import {
+  ATTACHMENT_KIND,
+  ATTACHMENT_MIME_TYPE,
+  ATTACHMENT_SOURCE_KIND,
+  ATTACHMENT_STATUS,
+  MAX_ATTACHMENT_UPLOAD_BYTES,
+} from "@/lib/attachment-constants";
+import { AppError } from "@/lib/errors";
+import { genAttachmentId } from "@/lib/id";
+import { removeAttachmentFile, writeAttachmentFile } from "./storage";
+
+function isPdfContent(buffer: Uint8Array) {
+  if (buffer.length < 5) {
+    return false;
+  }
+
+  return Buffer.from(buffer.subarray(0, 5)).toString("utf8") === "%PDF-";
+}
+
+function sha256(input: Uint8Array) {
+  return createHash("sha256").update(input).digest("hex");
+}
+
+function normalizeOriginalName(originalName: string | null) {
+  const trimmed = originalName?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function ensurePdfFilename(candidate: string | null) {
+  return candidate?.toLowerCase().endsWith(".pdf") ?? false;
+}
+
+function parseContentLength(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isPdfContentType(value: string | null) {
+  return value?.toLowerCase().includes(ATTACHMENT_MIME_TYPE.PDF) ?? false;
+}
+
+export async function createAttachmentFromUpload(
+  sessionId: string,
+  file: File,
+) {
+  if (file.size <= 0) {
+    throw new AppError("Attachment file is empty", "ATTACHMENT_EMPTY", 400, false);
+  }
+
+  if (file.size > MAX_ATTACHMENT_UPLOAD_BYTES) {
+    throw new AppError(
+      `Attachment exceeds ${MAX_ATTACHMENT_UPLOAD_BYTES} bytes`,
+      "ATTACHMENT_TOO_LARGE",
+      400,
+      false,
+    );
+  }
+
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  if (!isPdfContent(buffer)) {
+    throw new AppError(
+      "Only PDF attachments are supported",
+      "ATTACHMENT_UNSUPPORTED_TYPE",
+      400,
+      false,
+    );
+  }
+
+  const attachmentId = genAttachmentId();
+  const originalName = normalizeOriginalName(file.name);
+  const storageKey = await writeAttachmentFile(attachmentId, buffer, originalName);
+
+  try {
+    return await db.transaction(async (tx) =>
+      createAttachment(tx, {
+        id: attachmentId,
+        sessionId,
+        kind: ATTACHMENT_KIND.DOCUMENT,
+        mimeType: ATTACHMENT_MIME_TYPE.PDF,
+        originalName,
+        sizeBytes: file.size,
+        checksumSha256: sha256(buffer),
+        sourceKind: ATTACHMENT_SOURCE_KIND.UPLOAD,
+        storageKey,
+        status: ATTACHMENT_STATUS.PENDING,
+        metadata: {},
+      }),
+    );
+  } catch (error) {
+    await removeAttachmentFile(storageKey).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function createAttachmentFromUrl(
+  sessionId: string,
+  url: string,
+  originalName?: string | null,
+) {
+  let response: Response | null = null;
+
+  try {
+    response = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    response = null;
+  }
+
+  const normalizedOriginalName = normalizeOriginalName(originalName ?? null);
+  const urlObject = new URL(url);
+  const inferredName =
+    normalizedOriginalName ??
+    (urlObject.pathname.split("/").pop()?.trim() || null);
+  const contentType = response?.headers.get("content-type") ?? null;
+  const sizeBytes = parseContentLength(
+    response?.headers.get("content-length") ?? null,
+  );
+
+  if (!isPdfContentType(contentType) && !ensurePdfFilename(inferredName)) {
+    throw new AppError(
+      "Only PDF attachment URLs are supported",
+      "ATTACHMENT_UNSUPPORTED_TYPE",
+      400,
+      false,
+    );
+  }
+
+  if (sizeBytes !== null && sizeBytes > MAX_ATTACHMENT_UPLOAD_BYTES) {
+    throw new AppError(
+      `Attachment exceeds ${MAX_ATTACHMENT_UPLOAD_BYTES} bytes`,
+      "ATTACHMENT_TOO_LARGE",
+      400,
+      false,
+    );
+  }
+
+  return db.transaction(async (tx) =>
+    createAttachment(tx, {
+      sessionId,
+      kind: ATTACHMENT_KIND.DOCUMENT,
+      mimeType: ATTACHMENT_MIME_TYPE.PDF,
+      originalName: inferredName,
+      sizeBytes,
+      checksumSha256: null,
+      sourceKind: ATTACHMENT_SOURCE_KIND.URL,
+      sourceUrl: url,
+      status: ATTACHMENT_STATUS.PENDING,
+      metadata: {
+        headStatus: response?.status ?? null,
+        contentType,
+      },
+    }),
+  );
+}

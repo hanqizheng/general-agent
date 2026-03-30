@@ -2,6 +2,11 @@ import { sql } from "drizzle-orm";
 import { integer, jsonb, text, timestamp } from "drizzle-orm/pg-core";
 import { MESSAGE_STATUS, SESSION_STATUS } from "@/lib/constants";
 import type { ArtifactPartPayload } from "@/lib/artifact-types";
+import { MESSAGE_PART_KIND } from "@/lib/constants";
+import type {
+  AttachmentPartPayload,
+  TextPartPayload,
+} from "@/lib/attachment-types";
 
 export const sessionStatusValues = [
   SESSION_STATUS.IDLE,
@@ -25,11 +30,12 @@ export const messageStatusValues = [
   MESSAGE_STATUS.INTERRUPTED,
 ] as const;
 export const messagePartKindValues = [
-  "text",
-  "reasoning",
+  MESSAGE_PART_KIND.TEXT,
+  MESSAGE_PART_KIND.ATTACHMENT,
+  MESSAGE_PART_KIND.REASONING,
   "tool_use",
   "tool_result",
-  "artifact",
+  MESSAGE_PART_KIND.ARTIFACT,
 ] as const;
 export const messagePartStateValues = [
   "streaming",
@@ -64,6 +70,8 @@ export type TransientArtifactRetentionPolicyValue =
 
 export type MessagePartPayload =
   | Record<string, never>
+  | TextPartPayload
+  | AttachmentPartPayload
   | {
       toolCallId: string;
       toolName: string;

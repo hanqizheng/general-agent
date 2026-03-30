@@ -10,6 +10,12 @@
 
 import type { ArtifactContract, StructuredArtifactResult } from "@/core/contracts";
 import type { ArtifactPartPayload } from "@/lib/artifact-types";
+import type {
+  AttachmentBindingSource,
+  AttachmentCitationAnnotation,
+  AttachmentKind,
+  AttachmentMimeType,
+} from "@/lib/attachment-types";
 import type { MessageRole } from "@/lib/types";
 
 /**
@@ -17,6 +23,14 @@ import type { MessageRole } from "@/lib/types";
  */
 export type LLMContentBlock =
   | { type: "text"; text: string }
+  | {
+      type: "attachment";
+      attachmentId: string;
+      kind: AttachmentKind;
+      mimeType: AttachmentMimeType;
+      originalName: string | null;
+      source?: AttachmentBindingSource;
+    }
   | { type: "reasoning"; text: string }
   | ({
       type: "artifact";
@@ -90,6 +104,13 @@ export type LLMStreamChunk =
       type: "usage";
       inputTokens: number;
       outputTokens: number;
+    }
+  | {
+      type: "text_annotations";
+      blocks: Array<{
+        blockIndex: number;
+        annotations: AttachmentCitationAnnotation[];
+      }>;
     };
 
 export interface LLMProvider {

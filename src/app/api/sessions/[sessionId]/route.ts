@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { cleanupSessionAttachments } from "@/core/attachments/binding-service";
 import { repairSessionIfStale } from "@/core/session/stale-run-recovery";
 import {
   getOwnedSessionDetail,
@@ -60,6 +61,8 @@ export async function DELETE(
   if (!deleted) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
+
+  void cleanupSessionAttachments(sessionId).catch(() => undefined);
 
   return NextResponse.json({ session: deleted });
 }

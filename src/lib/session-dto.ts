@@ -1,4 +1,10 @@
 import type {
+  AttachmentKind,
+  AttachmentMimeType,
+  AttachmentSourceKind,
+  AttachmentStatus,
+} from "./attachment-types";
+import type {
   MessagePartEndState,
   MessagePartKind,
   MessageStatus,
@@ -43,6 +49,28 @@ export interface SessionMessagesPageDto {
   messages: TranscriptMessageDto[];
   hasMore: boolean;
   nextBeforeSequence: number | null;
+}
+
+export interface AttachmentDto {
+  id: string;
+  kind: AttachmentKind;
+  mimeType: AttachmentMimeType;
+  originalName: string | null;
+  sizeBytes: number | null;
+  status: AttachmentStatus;
+  sourceKind: AttachmentSourceKind;
+  createdAt: string;
+}
+
+export interface CreateAttachmentResponseDto {
+  attachment: AttachmentDto;
+}
+
+export interface SendMessageInput {
+  text: string;
+  attachments: Array<{
+    attachmentId: string;
+  }>;
 }
 
 export interface StartRunResponseDto {

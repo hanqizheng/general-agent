@@ -4,7 +4,7 @@ const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
 const generate = customAlphabet(alphabet, 16);
 
 export function createId(
-  prefix: "s" | "m" | "t" | "p" | "r" | "a" | "u",
+  prefix: "s" | "m" | "t" | "p" | "r" | "a" | "u" | "f" | "b",
 ): string {
   return `${prefix}_${generate()}`;
 }
@@ -31,6 +31,14 @@ export function genRunId(): string {
 
 export function genArtifactId(): string {
   return createId("a");
+}
+
+export function genAttachmentId(): string {
+  return createId("f");
+}
+
+export function genAttachmentBindingId(): string {
+  return createId("b");
 }
 
 export function genUserId(): string {

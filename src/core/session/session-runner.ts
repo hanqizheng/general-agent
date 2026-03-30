@@ -1,23 +1,34 @@
 import { EventBus } from "@/core/events/bus";
-import { LOOP_END_REASON } from "@/core/events/constants";
+import { LOOP_END_REASON, SESSION_EVENT_TYPE } from "@/core/events/constants";
 import { EventEmitter } from "@/core/events/emitter";
 import { runAgentLoop } from "@/core/agent/loop";
 import type { LoopEndReason } from "@/core/events/types";
 import { db } from "@/db";
 import { finalizeRun, markRunRunning } from "@/db/repositories/run-repository";
-import { markRunMessagesInterrupted } from "@/db/repositories/message-repository";
+import {
+  hydrateMessageById,
+  markRunMessagesInterrupted,
+} from "@/db/repositories/message-repository";
 import { markSessionRunState } from "@/db/repositories/session-repository";
 import { MESSAGE_STATUS, SESSION_STATUS } from "@/lib/constants";
+import { AppError } from "@/lib/errors";
+import {
+  resolveLLMMessagesAttachments,
+  resolveLLMMessageAttachments,
+} from "@/core/attachments/binding-service";
 import { liveSessionRegistry } from "./live-session-registry";
 import { DbSessionProjector } from "./db-session-projector";
-import { assembleSessionContext } from "./context-assembler";
+import {
+  assembleSessionContext,
+  transcriptMessageToLLMMessage,
+} from "./context-assembler";
 import { maybeGenerateSessionPresentation } from "./presentation-generator";
 import type { SessionRunSetup } from "./run-setup";
 
 interface StartSessionRunParams {
   sessionId: string;
   runId: string;
-  userMessage: string;
+  requestMessageId: string;
   workspaceRoot: string;
   setup: SessionRunSetup;
   generateSessionPresentation?: boolean;
@@ -50,6 +61,7 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
   const projector = new DbSessionProjector(params.sessionId, params.runId);
 
   let projectionQueue: Promise<void> = Promise.resolve();
+  let loopStarted = false;
 
   bus.on((event) => {
     liveSessionRegistry.broadcast(params.sessionId, event);
@@ -70,13 +82,38 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
         );
       });
 
-      const history = await assembleSessionContext(params.sessionId);
+      const requestMessage = await hydrateMessageById(params.requestMessageId);
+      const currentUserMessage = transcriptMessageToLLMMessage(requestMessage);
+      if (!currentUserMessage || currentUserMessage.role !== "user") {
+        throw new AppError(
+          "Run request message is missing",
+          "REQUEST_MESSAGE_NOT_FOUND",
+          500,
+          false,
+        );
+      }
+
+      const history = await assembleSessionContext(params.sessionId, {
+        excludeMessageId: params.requestMessageId,
+      });
+      const resolvedHistory = await resolveLLMMessagesAttachments(history, {
+        provider: params.setup.providerName,
+        modelFamily: params.setup.model,
+      });
+      const resolvedCurrentUserMessage = await resolveLLMMessageAttachments(
+        currentUserMessage,
+        {
+          provider: params.setup.providerName,
+          modelFamily: params.setup.model,
+        },
+      );
+      loopStarted = true;
       const result = await runAgentLoop({
         emitter,
         provider: params.setup.provider,
         systemPrompt: params.setup.systemPrompt,
-        userMessage: params.userMessage,
-        history,
+        userContent: resolvedCurrentUserMessage.content,
+        history: resolvedHistory,
         interruptSignal: abortController.signal,
         contractRegistry: params.setup.contractRegistry,
         targetArtifactContractId: params.targetArtifactContractId ?? null,
@@ -124,6 +161,26 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
         }).catch(() => undefined);
       }
     } catch (error: unknown) {
+      if (!loopStarted) {
+        emitter.emit({
+          type: SESSION_EVENT_TYPE.ERROR,
+          error: {
+            code:
+              error instanceof AppError ? error.code : "RUN_UNCAUGHT",
+            message:
+              error instanceof Error ? error.message : "Unknown run error",
+            recoverable:
+              error instanceof AppError ? error.recoverable : false,
+          },
+        });
+        emitter.emit({
+          type: SESSION_EVENT_TYPE.STATUS,
+          status: liveSessionRegistry.wasAbortRequested(params.sessionId)
+            ? SESSION_STATUS.IDLE
+            : SESSION_STATUS.ERROR,
+        });
+      }
+
       await projectionQueue.catch(() => undefined);
 
       const status = liveSessionRegistry.wasAbortRequested(params.sessionId)

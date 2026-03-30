@@ -15,6 +15,13 @@
       "when": 1774423326511,
       "tag": "0001_old_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774860532131,
+      "tag": "0002_shiny_dormammu",
+      "breakpoints": true
     }
   ]
 }

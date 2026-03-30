@@ -3,12 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { db } from "@/db";
+import { providerSupportsAttachmentInput } from "@/core/provider/attachment-capabilities";
 import {
   bindMessageToRun,
   hydrateMessageById,
   hydrateVisibleMessagesPage,
   insertVisibleUserMessage,
 } from "@/db/repositories/message-repository";
+import {
+  listSessionAttachments,
+  listSessionAttachmentsByIds,
+} from "@/db/repositories/attachment-repository";
 import { createQueuedRun } from "@/db/repositories/run-repository";
 import {
   getOwnedSessionDetail,
@@ -19,6 +24,7 @@ import { prepareSessionRunSetup } from "@/core/session/run-setup";
 import { startSessionRun } from "@/core/session/session-runner";
 import { repairSessionIfStale } from "@/core/session/stale-run-recovery";
 import { requireUserId } from "@/lib/auth-utils";
+import type { AttachmentPartPayload } from "@/lib/attachment-types";
 import type { SessionDetailDto } from "@/lib/session-dto";
 
 export const runtime = "nodejs";
@@ -26,6 +32,14 @@ export const dynamic = "force-dynamic";
 
 const sendMessageBodySchema = z.object({
   text: z.string().trim().min(1).max(100_000),
+  attachments: z
+    .array(
+      z.object({
+        attachmentId: z.string().trim().min(1),
+      }),
+    )
+    .max(10)
+    .optional(),
   format: z
     .object({
       type: z.literal("artifact_contract"),
@@ -105,6 +119,11 @@ export async function POST(
 
   const setup = await prepareSessionRunSetup(session.workspaceRoot);
   const targetArtifactContractId = parsed.data.format?.contractId ?? null;
+  const requestedAttachmentIds = Array.from(
+    new Set(
+      (parsed.data.attachments ?? []).map((attachment) => attachment.attachmentId),
+    ),
+  );
 
   if (
     targetArtifactContractId &&
@@ -115,6 +134,53 @@ export async function POST(
       { status: 400 },
     );
   }
+
+  const requestedAttachments =
+    requestedAttachmentIds.length > 0
+      ? await listSessionAttachmentsByIds(sessionId, requestedAttachmentIds)
+      : [];
+
+  if (requestedAttachments.length !== requestedAttachmentIds.length) {
+    return NextResponse.json(
+      {
+        error: "ATTACHMENT_NOT_FOUND",
+        message: "One or more attachments were not found for this session",
+      },
+      { status: 404 },
+    );
+  }
+
+  const sessionAttachments =
+    setup.providerName === "anthropic"
+      ? requestedAttachments
+      : await listSessionAttachments(sessionId);
+
+  const unsupportedAttachment = sessionAttachments.find(
+    (attachment) =>
+      !providerSupportsAttachmentInput(setup.providerName, {
+        kind: attachment.kind,
+        mimeType: attachment.mimeType,
+      }),
+  );
+
+  if (unsupportedAttachment) {
+    return NextResponse.json(
+      {
+        error: "ATTACHMENT_NOT_SUPPORTED",
+        message: `Provider "${setup.providerName}" does not support ${unsupportedAttachment.mimeType} attachments`,
+      },
+      { status: 409 },
+    );
+  }
+
+  const attachmentPayloads: AttachmentPartPayload[] = requestedAttachments.map(
+    (attachment) => ({
+      attachmentId: attachment.id,
+      kind: attachment.kind,
+      mimeType: attachment.mimeType,
+      originalName: attachment.originalName,
+    }),
+  );
 
   let createdRunId: string | null = null;
   let createdUserMessageId: string | null = null;
@@ -138,6 +204,7 @@ export async function POST(
         runId: null,
         turnIndex: null,
         text: parsed.data.text,
+        attachments: attachmentPayloads,
       });
 
       const run = await createQueuedRun(tx, {
@@ -195,7 +262,7 @@ export async function POST(
   void startSessionRun({
     sessionId,
     runId: createdRunId,
-    userMessage: parsed.data.text,
+    requestMessageId: createdUserMessageId,
     workspaceRoot,
     setup,
     generateSessionPresentation: shouldGenerateSessionPresentation,

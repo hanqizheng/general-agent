@@ -40,6 +40,7 @@ export const MESSAGE_ROLE = {
 /** assistant message 内部 part 的种类 */
 export const MESSAGE_PART_KIND = {
   TEXT: "text",
+  ATTACHMENT: "attachment",
   REASONING: "reasoning",
   TOOL: "tool",
   ARTIFACT: "artifact",

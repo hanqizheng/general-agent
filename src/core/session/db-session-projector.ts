@@ -99,6 +99,16 @@ export class DbSessionProjector {
         });
         break;
 
+      case "message.text.annotations":
+        await updateMessagePart(db, {
+          messageId: event.messageId,
+          partIndex: event.partIndex,
+          payload: {
+            annotations: event.annotations,
+          },
+        });
+        break;
+
       case "message.reasoning.delta":
         await appendMessagePartText(db, {
           messageId: event.messageId,

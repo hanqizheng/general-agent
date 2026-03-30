@@ -24,6 +24,7 @@ import {
 } from "./session-repository";
 import { genMessageId, genPartId } from "@/lib/id";
 import { MESSAGE_PART_END_STATE, MESSAGE_STATUS } from "@/lib/constants";
+import type { AttachmentPartPayload } from "@/lib/attachment-types";
 import type {
   SessionMessagesPageDto,
   TranscriptMessageDto,
@@ -82,7 +83,7 @@ function toTranscriptMessages(
       kind: mapPartKind(part.kind),
       state: mapPartState(part.state),
       textContent: part.textContent,
-      payload: part.payload,
+      payload: part.payload as unknown as Record<string, unknown>,
     });
     partsByMessageId.set(part.messageId, current);
   }
@@ -106,6 +107,7 @@ export async function insertVisibleUserMessage(
   executor: DbExecutor,
   input: Omit<InsertTextMessageInput, "role" | "visibility" | "status"> & {
     text: string;
+    attachments?: AttachmentPartPayload[];
   },
 ) {
   const sequence = await allocateNextSequence(executor, input.sessionId);
@@ -128,17 +130,34 @@ export async function insertVisibleUserMessage(
     })
     .returning();
 
-  await executor.insert(messageParts).values({
+  const attachmentParts = (input.attachments ?? []).map((attachment, index) => ({
     id: genPartId(),
     messageId,
-    partIndex: 0,
-    kind: "text",
-    state: "completed",
-    textContent: input.text,
-    payload: {},
+    partIndex: index,
+    kind: "attachment" as const,
+    state: "completed" as const,
+    textContent: null,
+    payload: attachment,
     createdAt: now,
     updatedAt: now,
-  });
+  }));
+
+  const partValues: (typeof messageParts.$inferInsert)[] = [
+    ...attachmentParts,
+    {
+      id: genPartId(),
+      messageId,
+      partIndex: attachmentParts.length,
+      kind: "text",
+      state: "completed",
+      textContent: input.text,
+      payload: {},
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+
+  await executor.insert(messageParts).values(partValues);
 
   await touchSession(executor, input.sessionId, now);
   await maybePromoteSessionTitle(executor, input.sessionId, sequence, input.text);
@@ -229,7 +248,13 @@ export async function createMessagePart(
   input: {
     messageId: string;
     partIndex: number;
-    kind: "text" | "reasoning" | "tool_use" | "tool_result" | "artifact";
+    kind:
+      | "text"
+      | "attachment"
+      | "reasoning"
+      | "tool_use"
+      | "tool_result"
+      | "artifact";
     payload?: MessagePartPayload;
   },
 ) {
