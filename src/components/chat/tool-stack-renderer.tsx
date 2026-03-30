@@ -60,7 +60,7 @@ export function ToolStackRenderer({ parts }: ToolStackRendererProps) {
           ? parts.map((part, index) => (
               <ToolRenderer
                 key={part.toolCallId ?? `tool-stack-${part.partIndex}`}
-                detailsAccessory={index === 0 ? toggleButton : undefined}
+                detailsAccessory={index === parts.length - 1 ? toggleButton : undefined}
                 part={part}
               />
             ))
