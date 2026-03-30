@@ -116,9 +116,14 @@ export function InputArea({
     mimeLabel: "PDF",
     status: draft.status,
     error: draft.error,
-    onRemove: () => removeAttachment(draft.clientId),
+    onRemove:
+      !busy && !isSubmitting
+        ? () => {
+            void removeAttachment(draft.clientId);
+          }
+        : undefined,
     onRetry:
-      draft.status === "error"
+      !busy && !isSubmitting && draft.status === "error"
         ? () => retryAttachment(draft.clientId)
         : undefined,
   }));

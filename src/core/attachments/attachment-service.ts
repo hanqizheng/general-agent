@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 
 import { db } from "@/db";
-import { createAttachment } from "@/db/repositories/attachment-repository";
+import {
+  createAttachment,
+  getSessionAttachmentById,
+  softDeleteAttachments,
+} from "@/db/repositories/attachment-repository";
+import { attachmentHasMessageReference } from "@/db/repositories/message-repository";
 import {
   ATTACHMENT_KIND,
   ATTACHMENT_MIME_TYPE,
@@ -11,6 +16,10 @@ import {
 } from "@/lib/attachment-constants";
 import { AppError } from "@/lib/errors";
 import { genAttachmentId } from "@/lib/id";
+import {
+  expireAttachmentsInStore,
+  purgeAttachmentResourcesByIds,
+} from "./binding-service";
 import { removeAttachmentFile, writeAttachmentFile } from "./storage";
 
 function isPdfContent(buffer: Uint8Array) {
@@ -162,4 +171,36 @@ export async function createAttachmentFromUrl(
       },
     }),
   );
+}
+
+export async function deleteDraftAttachment(
+  sessionId: string,
+  attachmentId: string,
+) {
+  const attachment = await getSessionAttachmentById(sessionId, attachmentId);
+  if (!attachment) {
+    throw new AppError(
+      "Attachment not found",
+      "ATTACHMENT_NOT_FOUND",
+      404,
+      false,
+    );
+  }
+
+  const inUse = await attachmentHasMessageReference(sessionId, attachmentId);
+  if (inUse) {
+    throw new AppError(
+      "Attachment is already referenced by a message",
+      "ATTACHMENT_IN_USE",
+      409,
+      false,
+    );
+  }
+
+  await db.transaction(async (tx) => {
+    await expireAttachmentsInStore(tx, [attachmentId]);
+    await softDeleteAttachments(tx, [attachmentId]);
+  });
+
+  await purgeAttachmentResourcesByIds([attachmentId]);
 }

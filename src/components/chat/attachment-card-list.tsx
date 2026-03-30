@@ -53,7 +53,7 @@ function getListClasses(variant: NonNullable<AttachmentCardListProps["variant"]>
 
 function getCardClasses(variant: NonNullable<AttachmentCardListProps["variant"]>) {
   if (variant === "message") {
-    return "min-w-0 max-w-[320px] flex-[0_1_260px] rounded-[18px] bg-zinc-500/48 px-3 py-2 backdrop-blur-sm";
+    return "min-w-0 max-w-[320px] flex-[0_1_260px] rounded-[18px] bg-stone-300/58 px-3 py-2";
   }
 
   return "min-w-0 max-w-[320px] flex-[0_1_260px] rounded-[18px] bg-white/82 px-3 py-2";
@@ -79,7 +79,7 @@ function getIconWrapClasses(
 
 function getTitleClasses(variant: NonNullable<AttachmentCardListProps["variant"]>) {
   return variant === "message"
-    ? "truncate text-[13px] font-semibold leading-5 text-white"
+    ? "truncate text-[13px] font-semibold leading-5 text-stone-900"
     : "truncate text-[13px] font-semibold leading-5 text-stone-900";
 }
 
@@ -88,11 +88,11 @@ function getSubtitleClasses(
   status: AttachmentCardItem["status"],
 ) {
   if (status === "error") {
-    return variant === "message" ? "mt-0.5 text-[11px] text-rose-200" : "mt-0.5 text-[11px] text-rose-600";
+    return variant === "message" ? "mt-0.5 text-[11px] text-rose-700" : "mt-0.5 text-[11px] text-rose-600";
   }
 
   return variant === "message"
-    ? "mt-0.5 text-[10px] text-zinc-100/90"
+    ? "mt-0.5 text-[10px] text-stone-600"
     : "mt-0.5 text-[10px] text-stone-500";
 }
 

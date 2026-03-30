@@ -114,6 +114,7 @@ export interface UIMessage {
 
 export interface ComposerAttachmentDraft {
   clientId: string;
+  sessionId: string | null;
   fileName: string;
   mimeType: string;
   sizeBytes: number;

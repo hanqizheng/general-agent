@@ -66,6 +66,10 @@ export interface CreateAttachmentResponseDto {
   attachment: AttachmentDto;
 }
 
+export interface DeleteAttachmentResponseDto {
+  ok: true;
+}
+
 export interface SendMessageInput {
   text: string;
   attachments: Array<{

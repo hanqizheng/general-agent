@@ -11,7 +11,7 @@ import {
 } from "@/db/repositories/attachment-binding-repository";
 import {
   getAttachmentById,
-  listAttachmentsByIds,
+  listAttachmentsByIdsIncludingDeleted,
   listSessionAttachments,
   markAttachmentsExpired,
   markAttachmentStatus,
@@ -376,7 +376,7 @@ export async function purgeAttachmentResourcesByIds(attachmentIds: string[]) {
     env.ANTHROPIC_AUTH_TOKEN && env.ANTHROPIC_BASE_URL ? getAnthropicClient() : null;
   const [bindings, attachments] = await Promise.all([
     listAttachmentBindingsByAttachmentIds(attachmentIds),
-    listAttachmentsByIds(attachmentIds),
+    listAttachmentsByIdsIncludingDeleted(attachmentIds),
   ]);
   const removedStorageKeys = new Set<string>();
 

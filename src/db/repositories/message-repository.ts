@@ -23,7 +23,11 @@ import {
   touchSession,
 } from "./session-repository";
 import { genMessageId, genPartId } from "@/lib/id";
-import { MESSAGE_PART_END_STATE, MESSAGE_STATUS } from "@/lib/constants";
+import {
+  MESSAGE_PART_END_STATE,
+  MESSAGE_PART_KIND,
+  MESSAGE_STATUS,
+} from "@/lib/constants";
 import type { AttachmentPartPayload } from "@/lib/attachment-types";
 import type {
   SessionMessagesPageDto,
@@ -163,6 +167,28 @@ export async function insertVisibleUserMessage(
   await maybePromoteSessionTitle(executor, input.sessionId, sequence, input.text);
 
   return message;
+}
+
+export async function attachmentHasMessageReference(
+  sessionId: string,
+  attachmentId: string,
+) {
+  const [row] = await db
+    .select({
+      messageId: messageParts.messageId,
+    })
+    .from(messageParts)
+    .innerJoin(messages, eq(messageParts.messageId, messages.id))
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messageParts.kind, MESSAGE_PART_KIND.ATTACHMENT),
+        sql`${messageParts.payload} ->> 'attachmentId' = ${attachmentId}`,
+      ),
+    )
+    .limit(1);
+
+  return Boolean(row);
 }
 
 export async function createAssistantMessage(

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+} from "react";
 
 import {
   ATTACHMENT_MIME_TYPE,
@@ -12,7 +19,10 @@ import {
   parseJsonResponse,
 } from "@/lib/client-auth";
 import type { ComposerAttachmentDraft } from "@/lib/chat-types";
-import type { CreateAttachmentResponseDto } from "@/lib/session-dto";
+import type {
+  CreateAttachmentResponseDto,
+  DeleteAttachmentResponseDto,
+} from "@/lib/session-dto";
 
 function createDraftId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -45,6 +55,24 @@ function formatBytes(bytes: number) {
   return `${bytes} B`;
 }
 
+async function deleteDraftAttachmentRequest(
+  sessionId: string,
+  attachmentId: string,
+) {
+  const response = await fetch(
+    `/api/sessions/${sessionId}/attachments/${attachmentId}`,
+    {
+      method: "DELETE",
+    },
+  );
+
+  if (response.status === 404) {
+    return;
+  }
+
+  await parseJsonResponse<DeleteAttachmentResponseDto>(response);
+}
+
 interface UseComposerAttachmentsResult {
   drafts: ComposerAttachmentDraft[];
   selectionError: string | null;
@@ -53,7 +81,7 @@ interface UseComposerAttachmentsResult {
   readyAttachmentRefs: Array<{ attachmentId: string }>;
   canSelectMore: boolean;
   addFiles: (files: FileList | File[]) => void;
-  removeAttachment: (clientId: string) => void;
+  removeAttachment: (clientId: string) => Promise<void>;
   retryAttachment: (clientId: string) => void;
   clearAttachments: () => void;
 }
@@ -67,6 +95,20 @@ export function useComposerAttachments(
   const draftsRef = useRef<ComposerAttachmentDraft[]>([]);
   const previousSessionIdRef = useRef<string | null>(sessionId);
 
+  const updateDrafts = useCallback(
+    (action: SetStateAction<ComposerAttachmentDraft[]>) => {
+      setDrafts((current) => {
+        const next =
+          typeof action === "function"
+            ? (action as (value: ComposerAttachmentDraft[]) => ComposerAttachmentDraft[])(current)
+            : action;
+        draftsRef.current = next;
+        return next;
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     draftsRef.current = drafts;
   }, [drafts]);
@@ -79,7 +121,7 @@ export function useComposerAttachments(
       const activeSessionId =
         sessionIdOverride ?? sessionId ?? (await ensureSessionId?.());
       if (!activeSessionId) {
-        setDrafts((current) =>
+        updateDrafts((current) =>
           current.map((item) =>
             item.clientId === draft.clientId
               ? {
@@ -97,11 +139,12 @@ export function useComposerAttachments(
 
       const controller = new AbortController();
 
-      setDrafts((current) =>
+      updateDrafts((current) =>
         current.map((item) =>
           item.clientId === draft.clientId
             ? {
                 ...item,
+                sessionId: activeSessionId,
                 status: "uploading",
                 attachmentId: null,
                 error: null,
@@ -125,30 +168,46 @@ export function useComposerAttachments(
         );
         const payload =
           await parseJsonResponse<CreateAttachmentResponseDto>(response);
+        let shouldDeleteOrphanedAttachment = false;
 
-        setDrafts((current) =>
-          current.map((item) =>
+        updateDrafts((current) => {
+          const exists = current.some((item) => item.clientId === draft.clientId);
+          if (!exists) {
+            shouldDeleteOrphanedAttachment = true;
+            return current;
+          }
+
+          return current.map((item) =>
             item.clientId === draft.clientId
               ? {
                   ...item,
+                  sessionId: activeSessionId,
                   status: "ready",
                   attachmentId: payload.attachment.id,
                   error: null,
                   abortController: null,
                 }
               : item,
-          ),
-        );
+          );
+        });
+
+        if (shouldDeleteOrphanedAttachment) {
+          await deleteDraftAttachmentRequest(
+            activeSessionId,
+            payload.attachment.id,
+          ).catch(() => undefined);
+        }
       } catch (error: unknown) {
         if (controller.signal.aborted || isAuthRedirectError(error)) {
           return;
         }
 
-        setDrafts((current) =>
+        updateDrafts((current) =>
           current.map((item) =>
             item.clientId === draft.clientId
               ? {
                   ...item,
+                  sessionId: activeSessionId,
                   status: "error",
                   attachmentId: null,
                   error:
@@ -162,11 +221,31 @@ export function useComposerAttachments(
         );
       }
     },
-    [ensureSessionId, sessionId],
+    [ensureSessionId, sessionId, updateDrafts],
+  );
+
+  const discardDraftResources = useCallback(
+    (items: ComposerAttachmentDraft[]) => {
+      for (const draft of items) {
+        draft.abortController?.abort();
+
+        if (
+          draft.status === "ready" &&
+          draft.attachmentId &&
+          draft.sessionId
+        ) {
+          void deleteDraftAttachmentRequest(
+            draft.sessionId,
+            draft.attachmentId,
+          ).catch(() => undefined);
+        }
+      }
+    },
+    [],
   );
 
   const clearAttachments = useCallback(() => {
-    setDrafts((current) => {
+    updateDrafts((current) => {
       for (const draft of current) {
         draft.abortController?.abort();
       }
@@ -174,7 +253,15 @@ export function useComposerAttachments(
       return [];
     });
     setSelectionError(null);
-  }, []);
+  }, [updateDrafts]);
+
+  const discardAttachments = useCallback(() => {
+    updateDrafts((current) => {
+      discardDraftResources(current);
+      return [];
+    });
+    setSelectionError(null);
+  }, [discardDraftResources, updateDrafts]);
 
   useEffect(() => {
     const previousSessionId = previousSessionIdRef.current;
@@ -185,22 +272,20 @@ export function useComposerAttachments(
       sessionId &&
       previousSessionId !== sessionId
     ) {
-      clearAttachments();
+      discardAttachments();
       return;
     }
 
     if (previousSessionId && sessionId === null) {
-      clearAttachments();
+      discardAttachments();
     }
-  }, [clearAttachments, sessionId]);
+  }, [discardAttachments, sessionId]);
 
   useEffect(() => {
     return () => {
-      for (const draft of draftsRef.current) {
-        draft.abortController?.abort();
-      }
+      discardDraftResources(draftsRef.current);
     };
-  }, []);
+  }, [discardDraftResources]);
 
   const addFiles = useCallback(
     (incomingFiles: FileList | File[]) => {
@@ -246,6 +331,7 @@ export function useComposerAttachments(
 
         acceptedDrafts.push({
           clientId: createDraftId(),
+          sessionId: null,
           fileName: file.name,
           mimeType: file.type || ATTACHMENT_MIME_TYPE.PDF,
           sizeBytes: file.size,
@@ -259,7 +345,7 @@ export function useComposerAttachments(
       }
 
       if (acceptedDrafts.length > 0) {
-        setDrafts((current) => [...current, ...acceptedDrafts]);
+        updateDrafts((current) => [...current, ...acceptedDrafts]);
 
         void (async () => {
           let activeSessionId: string | null = sessionId;
@@ -270,7 +356,7 @@ export function useComposerAttachments(
               return;
             }
 
-            setDrafts((current) =>
+            updateDrafts((current) =>
               current.map((item) =>
                 acceptedDrafts.some((draft) => draft.clientId === item.clientId)
                   ? {
@@ -297,17 +383,51 @@ export function useComposerAttachments(
 
       setSelectionError(nextErrors[0] ?? null);
     },
-    [ensureSessionId, sessionId, uploadDraft],
+    [ensureSessionId, sessionId, updateDrafts, uploadDraft],
   );
 
-  const removeAttachment = useCallback((clientId: string) => {
-    setSelectionError(null);
-    setDrafts((current) => {
-      const draft = current.find((item) => item.clientId === clientId);
-      draft?.abortController?.abort();
-      return current.filter((item) => item.clientId !== clientId);
-    });
-  }, []);
+  const removeAttachment = useCallback(
+    async (clientId: string) => {
+      setSelectionError(null);
+      const draft = draftsRef.current.find((item) => item.clientId === clientId);
+      if (!draft) {
+        return;
+      }
+
+      if (draft.status === "uploading") {
+        draft.abortController?.abort();
+        updateDrafts((current) =>
+          current.filter((item) => item.clientId !== clientId),
+        );
+        return;
+      }
+
+      if (draft.status === "ready" && draft.attachmentId && draft.sessionId) {
+        try {
+          await deleteDraftAttachmentRequest(
+            draft.sessionId,
+            draft.attachmentId,
+          );
+        } catch (error: unknown) {
+          if (isAuthRedirectError(error)) {
+            return;
+          }
+
+          setSelectionError(
+            error instanceof Error
+              ? error.message
+              : "Failed to delete attachment",
+          );
+          return;
+        }
+      }
+
+      updateDrafts((current) =>
+        current.filter((item) => item.clientId !== clientId),
+      );
+    },
+    [updateDrafts],
+  );
 
   const retryAttachment = useCallback(
     (clientId: string) => {
@@ -317,7 +437,7 @@ export function useComposerAttachments(
         return;
       }
 
-      void uploadDraft(draft);
+      void uploadDraft(draft, draft.sessionId);
     },
     [uploadDraft],
   );

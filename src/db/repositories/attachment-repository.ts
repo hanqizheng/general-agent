@@ -146,6 +146,19 @@ export async function listAttachmentsByIds(attachmentIds: string[]) {
     );
 }
 
+export async function listAttachmentsByIdsIncludingDeleted(
+  attachmentIds: string[],
+) {
+  if (attachmentIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select()
+    .from(attachments)
+    .where(inArray(attachments.id, attachmentIds));
+}
+
 export async function markAttachmentStatus(
   executor: DbExecutor,
   attachmentId: string,
@@ -175,6 +188,30 @@ export async function markAttachmentsExpired(
     .update(attachments)
     .set({
       status: ATTACHMENT_STATUS.EXPIRED,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        inArray(attachments.id, attachmentIds),
+        isNull(attachments.deletedAt),
+      ),
+    )
+    .returning();
+}
+
+export async function softDeleteAttachments(
+  executor: DbExecutor,
+  attachmentIds: string[],
+) {
+  if (attachmentIds.length === 0) {
+    return [];
+  }
+
+  return executor
+    .update(attachments)
+    .set({
+      status: ATTACHMENT_STATUS.EXPIRED,
+      deletedAt: new Date(),
       updatedAt: new Date(),
     })
     .where(
