@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { InputArea } from "@/components/chat/input-area";
 import { useChatShell } from "@/components/layout/chat-shell";
 import { useSessionsContext } from "@/components/providers/sessions-provider";
 import { writePendingMessage } from "@/hooks/use-initial-message";
+import type { SendMessageInput } from "@/lib/session-dto";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -20,13 +21,34 @@ export default function ChatPage() {
   const { desktopShellPadding } = useChatShell();
   const { createSession } = useSessionsContext();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
+  const sessionPromiseRef = useRef<Promise<string> | null>(null);
 
-  const handleSend = async (text: string) => {
+  const ensureSessionId = useCallback(async () => {
+    if (draftSessionId) {
+      return draftSessionId;
+    }
+
+    if (!sessionPromiseRef.current) {
+      sessionPromiseRef.current = createSession()
+        .then((session) => {
+          setDraftSessionId(session.id);
+          return session.id;
+        })
+        .finally(() => {
+          sessionPromiseRef.current = null;
+        });
+    }
+
+    return sessionPromiseRef.current;
+  }, [createSession, draftSessionId]);
+
+  const handleSend = async (input: SendMessageInput) => {
     setIsSubmitting(true);
     try {
-      const session = await createSession();
-      writePendingMessage(session.id, text);
-      router.push(`/chat/${session.id}`);
+      const sessionId = await ensureSessionId();
+      writePendingMessage(sessionId, input);
+      router.push(`/chat/${sessionId}`);
     } catch {
       setIsSubmitting(false);
     }
@@ -50,9 +72,9 @@ export default function ChatPage() {
           busy={isSubmitting}
           isStopping={false}
           onAbort={() => {}}
-          onSend={(text) => {
-            void handleSend(text);
-          }}
+          ensureSessionId={ensureSessionId}
+          onSend={handleSend}
+          sessionId={draftSessionId}
         />
       </div>
     </div>

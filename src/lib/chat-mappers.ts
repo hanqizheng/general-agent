@@ -7,6 +7,7 @@ import {
 import { CHAT_TRANSPORT_STATUS } from "./chat-constants";
 import type { ChatState, UIMessage, UIMessagePart } from "./chat-types";
 import type { ArtifactPartPayload, JSONValue } from "./artifact-types";
+import type { AttachmentPartPayload } from "./attachment-types";
 import type {
   SessionDetailDto,
   SessionMessagesPageDto,
@@ -34,6 +35,25 @@ function mapTranscriptPartToUiPart(part: TranscriptPartDto): UIMessagePart {
       partIndex: part.partIndex,
       state: mapPartState(part.state),
       text: part.textContent ?? "",
+    };
+  }
+
+  if (part.kind === MESSAGE_PART_KIND.ATTACHMENT) {
+    const payload = part.payload as Partial<AttachmentPartPayload> | null;
+    return {
+      kind: MESSAGE_PART_KIND.ATTACHMENT,
+      partIndex: part.partIndex,
+      state: mapPartState(part.state),
+      attachmentId:
+        typeof payload?.attachmentId === "string" ? payload.attachmentId : "",
+      attachmentKind:
+        payload?.kind === "document" ? payload.kind : "document",
+      mimeType:
+        typeof payload?.mimeType === "string"
+          ? payload.mimeType
+          : "application/pdf",
+      originalName:
+        typeof payload?.originalName === "string" ? payload.originalName : null,
     };
   }
 

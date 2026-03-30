@@ -18,6 +18,7 @@ import {
 } from "@/lib/constants";
 import type {
   ChatState,
+  UIAttachmentPart,
   MessagePartEndState,
   UIArtifactPart,
   UIReasoningPart,
@@ -69,6 +70,21 @@ function createReasoningPart(
   };
 }
 
+function createAttachmentPart(
+  partIndex: number,
+  state: MessagePartEndState | null = null,
+): UIAttachmentPart {
+  return {
+    kind: MESSAGE_PART_KIND.ATTACHMENT,
+    partIndex,
+    state,
+    attachmentId: "",
+    attachmentKind: "document",
+    mimeType: "application/pdf",
+    originalName: null,
+  };
+}
+
 function createToolPart(
   partIndex: number,
   state: MessagePartEndState | null = null,
@@ -108,6 +124,8 @@ function createMessagePart(
   switch (kind) {
     case MESSAGE_PART_KIND.TEXT:
       return createTextPart(partIndex);
+    case MESSAGE_PART_KIND.ATTACHMENT:
+      return createAttachmentPart(partIndex);
     case MESSAGE_PART_KIND.REASONING:
       return createReasoningPart(partIndex);
     case MESSAGE_PART_KIND.TOOL:
@@ -295,22 +313,21 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         requestError: null,
-        messages: [
-          ...state.messages,
-          {
-            messageId: action.messageId,
-            role: MESSAGE_ROLE.USER,
-            parts: [
-              createTextPart(0, action.text, MESSAGE_PART_END_STATE.COMPLETE),
-            ],
-            isStreaming: false,
-            status: MESSAGE_STATUS.COMPLETED,
-          },
-        ],
+        messages: state.messages.some(
+          (message) => message.messageId === action.message.messageId,
+        )
+          ? state.messages.map((message) =>
+              message.messageId === action.message.messageId
+                ? action.message
+                : message,
+            )
+          : [...state.messages, action.message],
       };
 
     case CHAT_ACTION_TYPE.RESET:
-      return initialState;
+      return {
+        ...initialState,
+      };
 
     case CHAT_ACTION_TYPE.SESSION_STATUS:
       return {
@@ -433,6 +450,15 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
                 ...part,
                 state: action.state,
               })),
+              status: nextStatus,
+            };
+
+          case MESSAGE_PART_KIND.ATTACHMENT:
+            return {
+              ...replaceOrAppendPart(
+                message,
+                createAttachmentPart(action.partIndex, action.state),
+              ),
               status: nextStatus,
             };
 

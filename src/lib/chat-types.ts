@@ -13,6 +13,7 @@ import type {
   ArtifactPartPayload,
   JSONValue,
 } from "./artifact-types";
+import type { AttachmentKind, AttachmentMimeType } from "./attachment-types";
 
 export type SessionStatus =
   (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
@@ -38,6 +39,7 @@ export type TransportStatus =
   (typeof CHAT_TRANSPORT_STATUS)[keyof typeof CHAT_TRANSPORT_STATUS];
 
 export type UIMessageStatus = MessageStatus;
+export type ComposerAttachmentStatus = "uploading" | "ready" | "error";
 
 /**
  * UI 消息只有 user 和 assistant 两种角色。
@@ -66,6 +68,14 @@ export interface UIReasoningPart extends UIMessagePartBase {
   text: string;
 }
 
+export interface UIAttachmentPart extends UIMessagePartBase {
+  kind: typeof MESSAGE_PART_KIND.ATTACHMENT;
+  attachmentId: string;
+  attachmentKind: AttachmentKind;
+  mimeType: AttachmentMimeType;
+  originalName: string | null;
+}
+
 export interface UIToolPart extends UIMessagePartBase {
   kind: typeof MESSAGE_PART_KIND.TOOL;
   toolCallId: string | null;
@@ -89,6 +99,7 @@ export interface UIArtifactPart extends UIMessagePartBase {
 
 export type UIMessagePart =
   | UITextPart
+  | UIAttachmentPart
   | UIReasoningPart
   | UIToolPart
   | UIArtifactPart;
@@ -99,6 +110,19 @@ export interface UIMessage {
   parts: UIMessagePart[];
   isStreaming: boolean;
   status: UIMessageStatus;
+}
+
+export interface ComposerAttachmentDraft {
+  clientId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: ComposerAttachmentStatus;
+  attachmentId: string | null;
+  error: string | null;
+  abortController: AbortController | null;
+  file: File;
+  dedupeKey: string;
 }
 
 export interface ChatState {
@@ -128,8 +152,7 @@ export type ChatAction =
     }
   | {
       type: typeof CHAT_ACTION_TYPE.USER_MESSAGE;
-      messageId: string;
-      text: string;
+      message: UIMessage;
     }
   | {
       type: typeof CHAT_ACTION_TYPE.SESSION_STATUS;

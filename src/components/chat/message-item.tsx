@@ -3,6 +3,7 @@
 import type { ReactElement } from "react";
 
 import type {
+  UIAttachmentPart,
   UIArtifactPart,
   UIMessage,
   UIMessagePart,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/constants";
 import { stableStringifyJson } from "@/lib/artifact-types";
 
+import { AttachmentCardList } from "./attachment-card-list";
 import { ArtifactRenderer } from "./artifact-renderer";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { ReasoningRenderer } from "./reasoning-renderer";
@@ -54,6 +56,21 @@ function getAssistantBadge(message: UIMessage) {
 
 function renderDetailPart(part: Exclude<UIMessagePart, { kind: "text" }>) {
   switch (part.kind) {
+    case MESSAGE_PART_KIND.ATTACHMENT:
+      return (
+        <AttachmentCardList
+          items={[
+            {
+              id: part.attachmentId,
+              mimeLabel: "PDF",
+              name: part.originalName ?? part.attachmentId,
+              status: "ready",
+            },
+          ]}
+          key={`attachment-${part.partIndex}`}
+          variant="message"
+        />
+      );
     case MESSAGE_PART_KIND.REASONING:
       return <ReasoningRenderer key={`reasoning-${part.partIndex}`} part={part} />;
     case MESSAGE_PART_KIND.TOOL:
@@ -103,6 +120,24 @@ function renderAssistantTextPart(part: Extract<UIMessagePart, { kind: "text" }>)
         <span className="inline-block h-4 w-2 rounded-sm bg-stone-300 align-middle" />
       ) : null}
     </section>
+  );
+}
+
+function renderUserAttachmentParts(parts: UIAttachmentPart[]) {
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return (
+    <AttachmentCardList
+      items={parts.map((part) => ({
+        id: part.attachmentId,
+        mimeLabel: "PDF",
+        name: part.originalName ?? part.attachmentId,
+        status: "ready",
+      }))}
+      variant="message"
+    />
   );
 }
 
@@ -187,11 +222,15 @@ export function MessageItem({
 }: MessageItemProps) {
   const isUser = message.role === MESSAGE_ROLE.USER;
   const messageWidthClass = isUser
-    ? "flex w-fit max-w-full flex-col items-end sm:max-w-[85%] lg:max-w-3xl"
+    ? "flex w-full max-w-full flex-col items-end sm:max-w-[85%] lg:max-w-3xl"
     : "w-full max-w-full lg:max-w-4xl";
   const textParts = message.parts.filter(
     (part): part is Extract<UIMessagePart, { kind: "text" }> =>
       part.kind === MESSAGE_PART_KIND.TEXT,
+  );
+  const attachmentParts = message.parts.filter(
+    (part): part is UIAttachmentPart =>
+      part.kind === MESSAGE_PART_KIND.ATTACHMENT,
   );
   const badge = !isUser ? getAssistantBadge(message) : null;
   const orderedAssistantParts = renderAssistantParts(
@@ -214,9 +253,14 @@ export function MessageItem({
         </div>
 
         {isUser ? (
-          <div className="min-w-0 overflow-hidden rounded-2xl bg-zinc-800 px-4 py-3 text-zinc-50 shadow-[0_16px_40px_rgba(24,24,27,0.16)] sm:px-5 sm:py-4">
-            <div className="chat-text-wrap whitespace-pre-wrap text-sm leading-6 sm:text-[15px] sm:leading-7">
-              {textParts.map((part) => part.text).join("\n\n")}
+          <div className="flex w-full flex-col items-end gap-2">
+            {attachmentParts.length > 0 ? (
+              <div className="w-full">{renderUserAttachmentParts(attachmentParts)}</div>
+            ) : null}
+            <div className="max-w-full overflow-hidden rounded-3xl bg-zinc-800 px-4 py-3 text-zinc-50 shadow-[0_16px_40px_rgba(24,24,27,0.16)] sm:px-5 sm:py-4">
+              <div className="chat-text-wrap whitespace-pre-wrap text-sm leading-6 sm:text-[15px] sm:leading-7">
+                {textParts.map((part) => part.text).join("\n\n")}
+              </div>
             </div>
           </div>
         ) : hasAssistantContent ? (
