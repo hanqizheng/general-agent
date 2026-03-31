@@ -121,6 +121,7 @@ export interface ComposerAttachmentDraft {
   status: ComposerAttachmentStatus;
   attachmentId: string | null;
   error: string | null;
+  retryable: boolean;
   abortController: AbortController | null;
   file: File;
   dedupeKey: string;

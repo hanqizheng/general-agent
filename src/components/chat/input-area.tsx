@@ -123,7 +123,10 @@ export function InputArea({
           }
         : undefined,
     onRetry:
-      !busy && !isSubmitting && draft.status === "error"
+      !busy &&
+      !isSubmitting &&
+      draft.status === "error" &&
+      draft.retryable
         ? () => retryAttachment(draft.clientId)
         : undefined,
   }));

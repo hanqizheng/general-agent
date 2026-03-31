@@ -56,6 +56,18 @@ function isPdfContentType(value: string | null) {
   return value?.toLowerCase().includes(ATTACHMENT_MIME_TYPE.PDF) ?? false;
 }
 
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  if (bytes >= 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${bytes} B`;
+}
+
 export async function createAttachmentFromUpload(
   sessionId: string,
   file: File,
@@ -66,7 +78,7 @@ export async function createAttachmentFromUpload(
 
   if (file.size > MAX_ATTACHMENT_UPLOAD_BYTES) {
     throw new AppError(
-      `Attachment exceeds ${MAX_ATTACHMENT_UPLOAD_BYTES} bytes`,
+      `Attachment exceeds ${formatBytes(MAX_ATTACHMENT_UPLOAD_BYTES)}`,
       "ATTACHMENT_TOO_LARGE",
       400,
       false,
@@ -147,7 +159,7 @@ export async function createAttachmentFromUrl(
 
   if (sizeBytes !== null && sizeBytes > MAX_ATTACHMENT_UPLOAD_BYTES) {
     throw new AppError(
-      `Attachment exceeds ${MAX_ATTACHMENT_UPLOAD_BYTES} bytes`,
+      `Attachment exceeds ${formatBytes(MAX_ATTACHMENT_UPLOAD_BYTES)}`,
       "ATTACHMENT_TOO_LARGE",
       400,
       false,

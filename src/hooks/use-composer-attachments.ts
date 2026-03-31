@@ -55,6 +55,24 @@ function formatBytes(bytes: number) {
   return `${bytes} B`;
 }
 
+function createDraft(file: File, overrides?: Partial<ComposerAttachmentDraft>) {
+  return {
+    clientId: createDraftId(),
+    sessionId: null,
+    fileName: file.name,
+    mimeType: file.type || ATTACHMENT_MIME_TYPE.PDF,
+    sizeBytes: file.size,
+    status: "uploading" as const,
+    attachmentId: null,
+    error: null,
+    retryable: true,
+    abortController: null,
+    file,
+    dedupeKey: buildDedupeKey(file),
+    ...overrides,
+  };
+}
+
 async function deleteDraftAttachmentRequest(
   sessionId: string,
   attachmentId: string,
@@ -129,6 +147,7 @@ export function useComposerAttachments(
                   status: "error",
                   attachmentId: null,
                   error: "Failed to create a session for this attachment.",
+                  retryable: true,
                   abortController: null,
                 }
               : item,
@@ -142,15 +161,16 @@ export function useComposerAttachments(
       updateDrafts((current) =>
         current.map((item) =>
           item.clientId === draft.clientId
-            ? {
-                ...item,
-                sessionId: activeSessionId,
-                status: "uploading",
-                attachmentId: null,
-                error: null,
-                abortController: controller,
-              }
-            : item,
+              ? {
+                  ...item,
+                  sessionId: activeSessionId,
+                  status: "uploading",
+                  attachmentId: null,
+                  error: null,
+                  retryable: true,
+                  abortController: controller,
+                }
+              : item,
         ),
       );
 
@@ -185,6 +205,7 @@ export function useComposerAttachments(
                   status: "ready",
                   attachmentId: payload.attachment.id,
                   error: null,
+                  retryable: false,
                   abortController: null,
                 }
               : item,
@@ -214,6 +235,7 @@ export function useComposerAttachments(
                     error instanceof Error
                       ? error.message
                       : "Failed to upload attachment",
+                  retryable: true,
                   abortController: null,
                 }
               : item,
@@ -294,59 +316,71 @@ export function useComposerAttachments(
         return;
       }
 
-      const nextErrors: string[] = [];
       const existingKeys = new Set(draftsRef.current.map((draft) => draft.dedupeKey));
       let availableSlots = MAX_MESSAGE_ATTACHMENTS - draftsRef.current.length;
+      const nextDrafts: ComposerAttachmentDraft[] = [];
       const acceptedDrafts: ComposerAttachmentDraft[] = [];
 
       for (const file of files) {
         const dedupeKey = buildDedupeKey(file);
 
         if (existingKeys.has(dedupeKey)) {
-          nextErrors.push(`${file.name} is already attached.`);
+          nextDrafts.push(
+            createDraft(file, {
+              status: "error",
+              error: `${file.name} is already attached.`,
+              retryable: false,
+            }),
+          );
           continue;
         }
 
         if (!isPdfFile(file)) {
-          nextErrors.push(`${file.name} is not a PDF.`);
+          nextDrafts.push(
+            createDraft(file, {
+              status: "error",
+              error: `${file.name} is not a PDF.`,
+              retryable: false,
+            }),
+          );
           continue;
         }
 
         if (file.size > MAX_ATTACHMENT_UPLOAD_BYTES) {
-          nextErrors.push(
-            `${file.name} exceeds ${formatBytes(MAX_ATTACHMENT_UPLOAD_BYTES)}.`,
+          nextDrafts.push(
+            createDraft(file, {
+              status: "error",
+              error: `${file.name} exceeds ${formatBytes(MAX_ATTACHMENT_UPLOAD_BYTES)}.`,
+              retryable: false,
+            }),
           );
           continue;
         }
 
         if (availableSlots <= 0) {
-          nextErrors.push(
-            `You can attach up to ${MAX_MESSAGE_ATTACHMENTS} PDF files.`,
+          nextDrafts.push(
+            createDraft(file, {
+              status: "error",
+              error: `You can attach up to ${MAX_MESSAGE_ATTACHMENTS} PDF files.`,
+              retryable: false,
+            }),
           );
-          break;
+          continue;
         }
 
         existingKeys.add(dedupeKey);
         availableSlots -= 1;
 
-        acceptedDrafts.push({
-          clientId: createDraftId(),
-          sessionId: null,
-          fileName: file.name,
-          mimeType: file.type || ATTACHMENT_MIME_TYPE.PDF,
-          sizeBytes: file.size,
-          status: "uploading",
-          attachmentId: null,
-          error: null,
-          abortController: null,
-          file,
-          dedupeKey,
-        });
+        const draft = createDraft(file);
+        acceptedDrafts.push(draft);
+        nextDrafts.push(draft);
+      }
+
+      if (nextDrafts.length > 0) {
+        updateDrafts((current) => [...current, ...nextDrafts]);
       }
 
       if (acceptedDrafts.length > 0) {
-        updateDrafts((current) => [...current, ...acceptedDrafts]);
-
         void (async () => {
           let activeSessionId: string | null = sessionId;
           try {
@@ -367,6 +401,7 @@ export function useComposerAttachments(
                         error instanceof Error
                           ? error.message
                           : "Failed to create a session for these attachments.",
+                      retryable: true,
                       abortController: null,
                     }
                   : item,
@@ -381,7 +416,7 @@ export function useComposerAttachments(
         })();
       }
 
-      setSelectionError(nextErrors[0] ?? null);
+      setSelectionError(null);
     },
     [ensureSessionId, sessionId, updateDrafts, uploadDraft],
   );
@@ -433,7 +468,7 @@ export function useComposerAttachments(
     (clientId: string) => {
       setSelectionError(null);
       const draft = draftsRef.current.find((item) => item.clientId === clientId);
-      if (!draft) {
+      if (!draft || !draft.retryable || draft.status !== "error") {
         return;
       }
 

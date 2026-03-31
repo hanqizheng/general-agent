@@ -38,4 +38,4 @@ export const ATTACHMENT_PROVIDER = {
 } as const;
 
 export const MAX_MESSAGE_ATTACHMENTS = 10;
-export const MAX_ATTACHMENT_UPLOAD_BYTES = 20 * 1024 * 1024;
+export const MAX_ATTACHMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
