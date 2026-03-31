@@ -1,6 +1,8 @@
 "use client";
 
-import type { ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
+
+import { Check, Copy } from "lucide-react";
 
 import type {
   UIAttachmentPart,
@@ -103,8 +105,40 @@ function mergeStructuredArtifactIntoTool(
   };
 }
 
-function renderAssistantTextPart(part: Extract<UIMessagePart, { kind: "text" }>) {
+function AssistantTextPart({
+  part,
+}: {
+  part: Extract<UIMessagePart, { kind: "text" }>;
+}) {
   const hasText = part.text.trim().length > 0;
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+
+  useEffect(() => {
+    if (copyState !== "copied") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCopyState("idle");
+    }, 2_000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [copyState]);
+
+  const copyText = async () => {
+    if (!hasText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(part.text);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  };
 
   return (
     <section
@@ -116,8 +150,39 @@ function renderAssistantTextPart(part: Extract<UIMessagePart, { kind: "text" }>)
       ) : (
         <div className="text-sm text-stone-500">Working...</div>
       )}
-      {part.state === null ? (
-        <span className="inline-block h-4 w-2 rounded-sm bg-stone-300 align-middle" />
+
+      {hasText || part.state === null ? (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="min-h-5">
+            {part.state === null ? (
+              <span className="inline-block h-4 w-2 rounded-sm bg-stone-300 align-middle" />
+            ) : null}
+          </div>
+
+          {hasText ? (
+            <button
+              aria-label="Copy assistant response"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-600 transition hover:bg-stone-200"
+              onClick={() => {
+                void copyText();
+              }}
+              type="button"
+            >
+              {copyState === "copied" ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              <span>
+                {copyState === "copied"
+                  ? "Copied"
+                  : copyState === "error"
+                    ? "Retry copy"
+                    : "Copy"}
+              </span>
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );
@@ -155,7 +220,7 @@ function renderAssistantParts(
         continue;
       }
 
-      rendered.push(renderAssistantTextPart(part));
+      rendered.push(<AssistantTextPart key={`text-${part.partIndex}`} part={part} />);
       continue;
     }
 
