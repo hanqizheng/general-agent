@@ -25,7 +25,7 @@ export async function runAgentLoop(
   const {
     emitter,
     history,
-    userMessage,
+    userContent,
     maxTurns = DEFAULT_MAX_TURNS,
     interruptSignal,
     provider,
@@ -41,7 +41,7 @@ export async function runAgentLoop(
     status: SESSION_STATUS.BUSY,
   });
 
-  let messages = buildContext(history, userMessage);
+  let messages = buildContext(history, userContent);
   let turnCount = 0;
 
   let endReason: LoopEndReason = LOOP_END_REASON.COMPLETE;

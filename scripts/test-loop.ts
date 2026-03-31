@@ -59,7 +59,7 @@ async function main() {
     const result = await runAgentLoop({
       emitter,
       history: [],
-      userMessage: "Summarize the repository risks.",
+      userContent: [{ type: "text", text: "Summarize the repository risks." }],
       provider: createMockProvider([
         { type: "text_delta", text: "Risk summary is ready." },
       ]),

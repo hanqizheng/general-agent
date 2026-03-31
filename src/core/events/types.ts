@@ -1,4 +1,5 @@
 import type { ArtifactPartPayload } from "@/lib/artifact-types";
+import type { AttachmentCitationAnnotation } from "@/lib/attachment-types";
 import {
   MESSAGE_PART_KIND,
   SESSION_EVENT_TYPE,
@@ -99,6 +100,13 @@ interface TextDoneEvent extends EventBase {
   partIndex: number;
 }
 
+interface TextAnnotationsEvent extends EventBase {
+  type: "message.text.annotations";
+  messageId: string;
+  partIndex: number;
+  annotations: AttachmentCitationAnnotation[];
+}
+
 interface MessageReasoningDeltaEvent extends EventBase {
   type: "message.reasoning.delta";
   messageId: string;
@@ -181,6 +189,7 @@ export type AgentEvent =
   | MessageEndEvent
   | TextDeltaEvent
   | TextDoneEvent
+  | TextAnnotationsEvent
   | MessageReasoningDeltaEvent
   | MessageReasoningDoneEvent
   | ToolStartEvent

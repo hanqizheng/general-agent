@@ -31,6 +31,10 @@ export function toLangChainMessages(
       for (const block of msg.content) {
         if (block.type === "text") {
           textParts.push(block.text);
+        } else if (block.type === "attachment") {
+          throw new Error(
+            "Attachment content requires a provider-native compiler and cannot be converted to generic LangChain messages.",
+          );
         } else if (block.type === "tool_result") {
           // 如果前面积攒了文本，先创建 HumanMessage
           if (textParts.length > 0) {
@@ -63,6 +67,10 @@ export function toLangChainMessages(
       for (const block of msg.content) {
         if (block.type === "text") {
           contentParts.push(block.text);
+        } else if (block.type === "attachment") {
+          throw new Error(
+            "Attachment content requires a provider-native compiler and cannot be converted to generic LangChain messages.",
+          );
         } else if (block.type === "reasoning") {
           // reasoning 不传给 LangChain，它是展示给用户的，不参与消息历史
           // LangChain 的 AIMessage 没有 reasoning 字段

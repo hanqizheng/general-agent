@@ -10,7 +10,7 @@ import type {
   LLMStructuredGenerationParams,
   LLMToolDefinition,
 } from "./base";
-import { toLangChainMessages } from "./converters";
+import { toAnthropicMessages } from "./anthropic-message-compiler";
 import {
   buildStructuredArtifactInstruction,
   buildStructuredArtifactSchema,
@@ -52,7 +52,7 @@ export function createAnthropicProvider(
       });
 
       // 转换消息格式
-      const langChainMessages = toLangChainMessages(messages, systemPrompt);
+      const langChainMessages = toAnthropicMessages(messages, systemPrompt);
 
       // 构建调用参数
       const callOptions: Record<string, unknown> = {};
@@ -89,7 +89,7 @@ export function createAnthropicProvider(
       );
 
       const langChainMessages = [
-        ...toLangChainMessages(params.messages, params.systemPrompt),
+        ...toAnthropicMessages(params.messages, params.systemPrompt),
         new HumanMessage(
           buildStructuredArtifactInstruction(
             params.contract,
@@ -175,4 +175,90 @@ async function* transformStream(
       }
     }
   }
+
+  if (Array.isArray(accumulated?.content)) {
+    const blocks: Array<{
+      blockIndex: number;
+      annotations: import("@/lib/attachment-types").AttachmentCitationAnnotation[];
+    }> = [];
+    let textBlockIndex = 0;
+
+    for (const block of accumulated.content) {
+      if (
+        typeof block === "object" &&
+        block !== null &&
+        "type" in block &&
+        block.type === "text"
+      ) {
+        const blockRecord = block as {
+          citations?: Array<Record<string, unknown>> | null;
+        };
+
+        const annotations = (blockRecord.citations ?? [])
+          .map((citation) => normalizeCitation(citation))
+          .filter(
+            (
+              annotation,
+            ): annotation is import("@/lib/attachment-types").AttachmentCitationAnnotation =>
+              annotation !== null,
+          );
+
+        if (annotations.length > 0) {
+          blocks.push({
+            blockIndex: textBlockIndex,
+            annotations,
+          });
+        }
+
+        textBlockIndex += 1;
+      }
+    }
+
+    if (blocks.length > 0) {
+      yield {
+        type: "text_annotations",
+        blocks,
+      };
+    }
+  }
+}
+
+function normalizeCitation(citation: Record<string, unknown>) {
+  if (citation.type !== "page_location") {
+    return null;
+  }
+
+  const startPageNumber =
+    typeof citation.start_page_number === "number"
+      ? citation.start_page_number
+      : null;
+  const endPageNumber =
+    typeof citation.end_page_number === "number" ? citation.end_page_number : null;
+  const documentIndex =
+    typeof citation.document_index === "number" ? citation.document_index : null;
+  const citedText =
+    typeof citation.cited_text === "string" ? citation.cited_text : null;
+
+  if (
+    startPageNumber === null ||
+    endPageNumber === null ||
+    documentIndex === null ||
+    citedText === null
+  ) {
+    return null;
+  }
+
+  return {
+    provider: "anthropic" as const,
+    type: "page_location" as const,
+    providerFileId:
+      typeof citation.file_id === "string" ? citation.file_id : null,
+    citedText,
+    documentIndex,
+    documentTitle:
+      typeof citation.document_title === "string" ? citation.document_title : null,
+    startPageNumber,
+    endPageNumber,
+    raw: citation,
+  };
 }

@@ -28,7 +28,7 @@ async function main() {
     emitter,
     provider,
     systemPrompt: "You are a helpful assistant. Reply in Chinese.",
-    userMessage: "用一句话介绍什么是 Agent Loop",
+    userContent: [{ type: "text", text: "用一句话介绍什么是 Agent Loop" }],
     history: [],
     maxTurns: 1,
   });

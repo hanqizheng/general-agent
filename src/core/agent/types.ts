@@ -1,4 +1,8 @@
-import type { LLMMessage, LLMStreamParams } from "../provider/base";
+import type {
+  LLMContentBlock,
+  LLMMessage,
+  LLMStreamParams,
+} from "../provider/base";
 import type { LLMProvider } from "../provider/base";
 
 import type { LoopEndReason } from "../events/types";
@@ -12,7 +16,7 @@ export interface AgentLoopStartParams {
   provider: LLMProvider;
   emitter: EventEmitter;
   systemPrompt: string;
-  userMessage: string;
+  userContent: LLMContentBlock[];
   history: LLMMessage[];
   maxTurns?: number;
   interruptSignal?: AbortSignal;

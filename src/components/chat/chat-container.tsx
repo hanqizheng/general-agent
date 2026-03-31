@@ -57,6 +57,7 @@ export function ChatContainer() {
           busy={session.status === SESSION_STATUS.BUSY}
           isStopping={isStopping}
           onAbort={abort}
+          sessionId={session.id}
           onSend={sendMessage}
         />
       </div>

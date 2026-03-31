@@ -1,6 +1,11 @@
 import type { LLMContentBlock, LLMMessage } from "@/core/provider/base";
 import { artifactPayloadToContentBlock } from "@/core/agent/artifacts";
+import { listSessionActiveAttachments } from "@/db/repositories/attachment-repository";
 import { getCompletedTranscript } from "@/db/repositories/message-repository";
+import type {
+  TranscriptMessageDto,
+} from "@/lib/session-dto";
+import type { AttachmentPartPayload } from "@/lib/attachment-types";
 
 interface TranscriptMessage {
   id: string;
@@ -13,16 +18,26 @@ interface TranscriptMessage {
 interface TranscriptPart {
   messageId: string;
   partIndex: number;
-  kind: "text" | "reasoning" | "tool_use" | "tool_result" | "artifact";
+  kind: "text" | "attachment" | "reasoning" | "tool_use" | "tool_result" | "artifact";
   textContent: string | null;
-  payload: Record<string, unknown>;
+  payload: Record<string, unknown> | null;
 }
 
-function sortParts(parts: TranscriptPart[]) {
+type ContentTranscriptPart = {
+  partIndex: number;
+  kind: string;
+  textContent: string | null;
+  payload: Record<string, unknown> | null;
+};
+
+function sortParts<T extends { partIndex: number }>(parts: T[]) {
   return [...parts].sort((a, b) => a.partIndex - b.partIndex);
 }
 
-function buildVisibleContent(parts: TranscriptPart[]): LLMContentBlock[] {
+export function buildVisibleContent(
+  parts: ContentTranscriptPart[],
+  options?: { replayableAttachmentIds?: Set<string> },
+): LLMContentBlock[] {
   const content: LLMContentBlock[] = [];
 
   for (const part of sortParts(parts)) {
@@ -34,6 +49,29 @@ function buildVisibleContent(parts: TranscriptPart[]): LLMContentBlock[] {
         });
         break;
 
+      case "attachment": {
+        const payload = (part.payload ?? {}) as Partial<AttachmentPartPayload>;
+        if (
+          typeof payload.attachmentId === "string" &&
+          (!options?.replayableAttachmentIds ||
+            options.replayableAttachmentIds.has(payload.attachmentId)) &&
+          payload.kind === "document" &&
+          typeof payload.mimeType === "string"
+        ) {
+          content.push({
+            type: "attachment",
+            attachmentId: payload.attachmentId,
+            kind: payload.kind,
+            mimeType: payload.mimeType,
+            originalName:
+              typeof payload.originalName === "string"
+                ? payload.originalName
+                : null,
+          });
+        }
+        break;
+      }
+
       case "reasoning":
         content.push({
           type: "reasoning",
@@ -41,29 +79,26 @@ function buildVisibleContent(parts: TranscriptPart[]): LLMContentBlock[] {
         });
         break;
 
-      case "tool_use":
-        {
-          const payload = part.payload as {
-            toolCallId: string;
-            toolName: string;
-            input: Record<string, unknown>;
-          };
+      case "tool_use": {
+        const payload = (part.payload ?? {}) as {
+          toolCallId: string;
+          toolName: string;
+          input: Record<string, unknown>;
+        };
 
-          content.push({
-            type: "tool_use",
-            id: String(payload.toolCallId),
-            name: String(payload.toolName),
-            input:
-              typeof payload.input === "object" && payload.input
-                ? payload.input
-                : {},
-          });
-        }
+        content.push({
+          type: "tool_use",
+          id: String(payload.toolCallId),
+          name: String(payload.toolName),
+          input:
+            typeof payload.input === "object" && payload.input ? payload.input : {},
+        });
         break;
+      }
 
       case "artifact":
         content.push(
-          artifactPayloadToContentBlock(part.payload as unknown as Parameters<
+          artifactPayloadToContentBlock(part.payload as Parameters<
             typeof artifactPayloadToContentBlock
           >[0]),
         );
@@ -81,7 +116,7 @@ function buildToolResultBlocks(parts: TranscriptPart[]): LLMContentBlock[] {
   return sortParts(parts)
     .filter((part) => part.kind === "tool_result")
     .map<LLMContentBlock>((part) => {
-      const payload = part.payload as {
+      const payload = (part.payload ?? {}) as {
         toolCallId: string;
         isError: boolean;
       };
@@ -95,16 +130,43 @@ function buildToolResultBlocks(parts: TranscriptPart[]): LLMContentBlock[] {
     });
 }
 
+export function transcriptMessageToLLMMessage(
+  message: TranscriptMessageDto,
+): LLMMessage | null {
+  if (message.visibility !== "visible") {
+    return null;
+  }
+
+  const content = buildVisibleContent(message.parts);
+  if (message.role === "user") {
+    return {
+      role: "user",
+      content: content.filter(
+        (block) => block.type === "text" || block.type === "attachment",
+      ),
+    };
+  }
+
+  return {
+    role: "assistant",
+    content: content.filter((block) => block.type !== "reasoning"),
+  };
+}
+
 export async function assembleSessionContext(
   sessionId: string,
+  options?: { excludeMessageId?: string | null },
 ): Promise<LLMMessage[]> {
   const transcript = await getCompletedTranscript(sessionId);
+  const replayableAttachmentIds = new Set(
+    (await listSessionActiveAttachments(sessionId)).map((attachment) => attachment.id),
+  );
   const partsByMessageId = new Map<string, TranscriptPart[]>();
   const toolResultsByTurn = new Map<string, LLMContentBlock[]>();
 
   for (const part of transcript.parts) {
     const current = partsByMessageId.get(part.messageId) ?? [];
-    current.push(part);
+    current.push(part as TranscriptPart);
     partsByMessageId.set(part.messageId, current);
   }
 
@@ -124,17 +186,21 @@ export async function assembleSessionContext(
   const result: LLMMessage[] = [];
 
   for (const message of transcript.messages as TranscriptMessage[]) {
-    if (message.visibility !== "visible") {
+    if (message.id === options?.excludeMessageId || message.visibility !== "visible") {
       continue;
     }
 
     const parts = partsByMessageId.get(message.id) ?? [];
-    const content = buildVisibleContent(parts);
+    const content = buildVisibleContent(parts, {
+      replayableAttachmentIds,
+    });
 
     if (message.role === "user") {
       result.push({
         role: "user",
-        content: content.filter((block) => block.type === "text"),
+        content: content.filter(
+          (block) => block.type === "text" || block.type === "attachment",
+        ),
       });
       continue;
     }

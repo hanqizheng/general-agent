@@ -20,12 +20,15 @@ import { CHAT_ACTION_TYPE } from "@/lib/chat-constants";
 import { buildInitialChatState } from "@/lib/chat-mappers";
 import type { ChatState, SessionStatus } from "@/lib/chat-types";
 import { SESSION_STATUS } from "@/lib/constants";
-import type { SessionMessagesPageDto } from "@/lib/session-dto";
+import type {
+  SendMessageInput,
+  SessionMessagesPageDto,
+} from "@/lib/session-dto";
 import { useSessionContext } from "./session-provider";
 
 interface ChatContextValue {
   state: ChatState;
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (input: SendMessageInput) => Promise<void>;
   abort: () => Promise<void>;
   loadOlder: () => Promise<void>;
   hasMore: boolean;
@@ -134,7 +137,7 @@ export function ChatProvider({
   });
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (input: SendMessageInput) => {
       if (state.status === SESSION_STATUS.BUSY) {
         return;
       }
@@ -143,30 +146,31 @@ export function ChatProvider({
 
       try {
         setAbortRequested(false);
-        await sendMessageRequest(text);
+        await sendMessageRequest(input);
       } catch (error: unknown) {
         dispatch({
           type: CHAT_ACTION_TYPE.REQUEST_ERROR,
           error:
             error instanceof Error ? error.message : "Failed to send message",
         });
+        throw error;
       }
     },
     [dispatch, sendMessageRequest, state.status],
   );
 
   const initialMessageSentRef = useRef(false);
-  const sendPendingMessage = useEffectEvent((text: string) => {
-    void sendMessage(text);
+  const sendPendingMessage = useEffectEvent((input: SendMessageInput) => {
+    void sendMessage(input);
   });
 
   useEffect(() => {
     if (initialMessageSentRef.current) return;
-    const text = consumePendingMessage(session.id);
-    if (text) {
+    const input = consumePendingMessage(session.id);
+    if (input) {
       initialMessageSentRef.current = true;
       queueMicrotask(() => {
-        sendPendingMessage(text);
+        sendPendingMessage(input);
       });
     }
   }, [session.id]);

@@ -9,6 +9,7 @@ import {
 
 import {
   createdAtColumn,
+  type MessagePartPayload,
   messagePartKindValues,
   messagePartStateValues,
   nullableTimestamp,
@@ -28,7 +29,7 @@ export const messageParts = pgTable(
     state: textEnumColumn("state", messagePartStateValues).notNull(),
     textContent: text("text_content"),
     payload: jsonb("payload")
-      .$type<Record<string, unknown>>()
+      .$type<MessagePartPayload>()
       .notNull()
       .default({}),
     createdAt: createdAtColumn(),

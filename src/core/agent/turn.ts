@@ -40,6 +40,7 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
 
   const contentBlocks: LLMContentBlock[] = [];
   const pendingToolCalls: PendingToolCall[] = [];
+  const completedTextPartIndices: number[] = [];
 
   let currentPartKind: StreamPartKind | null = null;
   let currentPartContent = "";
@@ -93,6 +94,8 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
             partIndex,
           });
         }
+
+        completedTextPartIndices.push(partIndex);
 
         contentBlocks.push({
           type: "text",
@@ -257,6 +260,23 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
             break;
 
           case "usage":
+            break;
+
+          case "text_annotations":
+            for (const block of chunk.blocks) {
+              const targetPartIndex = completedTextPartIndices[block.blockIndex];
+              if (
+                typeof targetPartIndex === "number" &&
+                block.annotations.length > 0
+              ) {
+                emitter.emit({
+                  type: "message.text.annotations",
+                  messageId: msgId,
+                  partIndex: targetPartIndex,
+                  annotations: block.annotations,
+                });
+              }
+            }
             break;
         }
       }

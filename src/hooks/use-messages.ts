@@ -4,9 +4,13 @@ import { useCallback, useState } from "react";
 
 import { CHAT_ACTION_TYPE } from "@/lib/chat-constants";
 import { parseJsonResponse } from "@/lib/client-auth";
-import { mapMessagesPageToUiMessages } from "@/lib/chat-mappers";
+import {
+  mapMessagesPageToUiMessages,
+  mapTranscriptMessageToUiMessage,
+} from "@/lib/chat-mappers";
 import type { ChatAction } from "@/lib/chat-types";
 import type {
+  SendMessageInput,
   SessionDetailDto,
   SessionMessagesPageDto,
   StartRunResponseDto,
@@ -83,13 +87,13 @@ export function useMessages({
   }, []);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (input: SendMessageInput) => {
       const response = await fetch(`/api/sessions/${sessionId}/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(input),
       });
 
       const payload = await parseJsonResponse<StartRunResponseDto>(response);
@@ -101,8 +105,7 @@ export function useMessages({
       });
       dispatch({
         type: CHAT_ACTION_TYPE.USER_MESSAGE,
-        messageId: payload.userMessage.id,
-        text,
+        message: mapTranscriptMessageToUiMessage(payload.userMessage),
       });
 
       return payload;
