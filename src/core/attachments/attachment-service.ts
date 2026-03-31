@@ -21,6 +21,10 @@ import {
   purgeAttachmentResourcesByIds,
 } from "./binding-service";
 import { removeAttachmentFile, writeAttachmentFile } from "./storage";
+import {
+  fetchSafeAttachmentHead,
+  UnsafeAttachmentUrlError,
+} from "./url-safety";
 
 function isPdfContent(buffer: Uint8Array) {
   if (buffer.length < 5) {
@@ -126,20 +130,25 @@ export async function createAttachmentFromUrl(
   url: string,
   originalName?: string | null,
 ) {
-  let response: Response | null = null;
+  const urlObject = new URL(url);
+  let response: Awaited<ReturnType<typeof fetchSafeAttachmentHead>> | null = null;
 
   try {
-    response = await fetch(url, {
-      method: "HEAD",
-      redirect: "follow",
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
+    response = await fetchSafeAttachmentHead(urlObject);
+  } catch (error) {
+    if (error instanceof UnsafeAttachmentUrlError) {
+      throw new AppError(
+        error.message,
+        "ATTACHMENT_URL_NOT_ALLOWED",
+        400,
+        false,
+      );
+    }
+
     response = null;
   }
 
   const normalizedOriginalName = normalizeOriginalName(originalName ?? null);
-  const urlObject = new URL(url);
   const inferredName =
     normalizedOriginalName ??
     (urlObject.pathname.split("/").pop()?.trim() || null);

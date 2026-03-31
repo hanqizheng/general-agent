@@ -33,6 +33,7 @@ export function InputArea({
   const previousSessionIdRef = useRef<string | null>(sessionId);
   const {
     drafts,
+    attachmentSlotCount,
     selectionError,
     hasUploadingAttachments,
     hasErrorAttachments,
@@ -58,11 +59,7 @@ export function InputArea({
     const previousSessionId = previousSessionIdRef.current;
     previousSessionIdRef.current = sessionId;
 
-    if (
-      previousSessionId &&
-      sessionId &&
-      previousSessionId !== sessionId
-    ) {
+    if (previousSessionId && sessionId && previousSessionId !== sessionId) {
       setText("");
       setIsSubmitting(false);
       return;
@@ -123,13 +120,15 @@ export function InputArea({
           }
         : undefined,
     onRetry:
-      !busy &&
-      !isSubmitting &&
-      draft.status === "error" &&
-      draft.retryable
+      !busy && !isSubmitting && draft.status === "error" && draft.retryable
         ? () => retryAttachment(draft.clientId)
         : undefined,
   }));
+
+  const attachmentLimitLabel =
+    !canSelectMore
+      ? `${attachmentSlotCount}/${MAX_MESSAGE_ATTACHMENTS} PDFs`
+      : null;
 
   return (
     <div className="mx-auto w-full max-w-4xl">
@@ -200,9 +199,11 @@ export function InputArea({
                 <Plus className="h-5 w-5" />
               </button>
 
-              <p className="rounded-2xl bg-stone-100/80 px-3 py-2 text-xs leading-5 text-stone-500">
-                PDF only. Up to {MAX_MESSAGE_ATTACHMENTS} files. Enter to send, Shift + Enter for a new line.
-              </p>
+              {attachmentLimitLabel ? (
+                <span className="text-xs font-medium text-stone-500">
+                  {attachmentLimitLabel}
+                </span>
+              ) : null}
             </div>
           </div>
 

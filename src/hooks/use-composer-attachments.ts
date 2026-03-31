@@ -55,6 +55,25 @@ function formatBytes(bytes: number) {
   return `${bytes} B`;
 }
 
+function occupiesMessageAttachmentSlot(draft: ComposerAttachmentDraft) {
+  return draft.status !== "error" || draft.retryable;
+}
+
+function formatSkippedFilesMessage(skippedCount: number) {
+  return `${skippedCount} file${skippedCount === 1 ? " was" : "s were"} skipped.`;
+}
+
+function buildAttachmentLimitMessage(
+  availableSlots: number,
+  skippedCount: number,
+) {
+  if (availableSlots <= 0) {
+    return `Maximum ${MAX_MESSAGE_ATTACHMENTS} PDFs per message. ${formatSkippedFilesMessage(skippedCount)}`;
+  }
+
+  return `Only ${availableSlots} more PDF${availableSlots === 1 ? "" : "s"} can be added. ${formatSkippedFilesMessage(skippedCount)}`;
+}
+
 function createDraft(file: File, overrides?: Partial<ComposerAttachmentDraft>) {
   return {
     clientId: createDraftId(),
@@ -93,6 +112,7 @@ async function deleteDraftAttachmentRequest(
 
 interface UseComposerAttachmentsResult {
   drafts: ComposerAttachmentDraft[];
+  attachmentSlotCount: number;
   selectionError: string | null;
   hasUploadingAttachments: boolean;
   hasErrorAttachments: boolean;
@@ -317,7 +337,15 @@ export function useComposerAttachments(
       }
 
       const existingKeys = new Set(draftsRef.current.map((draft) => draft.dedupeKey));
-      let availableSlots = MAX_MESSAGE_ATTACHMENTS - draftsRef.current.length;
+      const occupiedSlotCount = draftsRef.current.filter(
+        occupiesMessageAttachmentSlot,
+      ).length;
+      const initialAvailableSlots = Math.max(
+        0,
+        MAX_MESSAGE_ATTACHMENTS - occupiedSlotCount,
+      );
+      let availableSlots = initialAvailableSlots;
+      let skippedDueToLimitCount = 0;
       const nextDrafts: ComposerAttachmentDraft[] = [];
       const acceptedDrafts: ComposerAttachmentDraft[] = [];
 
@@ -358,13 +386,7 @@ export function useComposerAttachments(
         }
 
         if (availableSlots <= 0) {
-          nextDrafts.push(
-            createDraft(file, {
-              status: "error",
-              error: `You can attach up to ${MAX_MESSAGE_ATTACHMENTS} PDF files.`,
-              retryable: false,
-            }),
-          );
+          skippedDueToLimitCount += 1;
           continue;
         }
 
@@ -416,7 +438,14 @@ export function useComposerAttachments(
         })();
       }
 
-      setSelectionError(null);
+      setSelectionError(
+        skippedDueToLimitCount > 0
+          ? buildAttachmentLimitMessage(
+              initialAvailableSlots,
+              skippedDueToLimitCount,
+            )
+          : null,
+      );
     },
     [ensureSessionId, sessionId, updateDrafts, uploadDraft],
   );
@@ -481,6 +510,7 @@ export function useComposerAttachments(
     (draft) => draft.status === "uploading",
   );
   const hasErrorAttachments = drafts.some((draft) => draft.status === "error");
+  const attachmentSlotCount = drafts.filter(occupiesMessageAttachmentSlot).length;
   const readyAttachmentRefs = useMemo(
     () =>
       drafts.flatMap((draft) =>
@@ -493,11 +523,12 @@ export function useComposerAttachments(
 
   return {
     drafts,
+    attachmentSlotCount,
     selectionError,
     hasUploadingAttachments,
     hasErrorAttachments,
     readyAttachmentRefs,
-    canSelectMore: drafts.length < MAX_MESSAGE_ATTACHMENTS,
+    canSelectMore: attachmentSlotCount < MAX_MESSAGE_ATTACHMENTS,
     addFiles,
     removeAttachment,
     retryAttachment,
