@@ -18,6 +18,7 @@ interface MessageListEntry {
   id: string;
   message: UIMessage;
   toolContinuationParts: UIToolPart[];
+  emphasizeAssistantText: boolean;
 }
 
 function isVisibleTextPart(part: UIMessagePart) {
@@ -55,6 +56,10 @@ function collectToolParts(message: UIMessage) {
   );
 }
 
+function hasVisibleAssistantText(message: UIMessage) {
+  return message.parts.some(isVisibleTextPart);
+}
+
 function hasTrailingToolSequence(message: UIMessage) {
   if (message.role !== MESSAGE_ROLE.ASSISTANT || message.parts.length === 0) {
     return false;
@@ -74,6 +79,7 @@ function buildEntries(messages: UIMessage[]): MessageListEntry[] {
         id: message.messageId,
         message,
         toolContinuationParts: [],
+        emphasizeAssistantText: false,
       });
       continue;
     }
@@ -94,10 +100,43 @@ function buildEntries(messages: UIMessage[]): MessageListEntry[] {
       id: message.messageId,
       message,
       toolContinuationParts,
+      emphasizeAssistantText: false,
     });
   }
 
-  return entries;
+  return entries.map((entry, index) => {
+    if (
+      entry.message.role !== MESSAGE_ROLE.ASSISTANT ||
+      !hasVisibleAssistantText(entry.message)
+    ) {
+      return entry;
+    }
+
+    const hasTools =
+      collectToolParts(entry.message).length > 0 ||
+      entry.toolContinuationParts.length > 0;
+
+    if (hasTools) {
+      return entry;
+    }
+
+    for (let nextIndex = index + 1; nextIndex < entries.length; nextIndex += 1) {
+      const nextEntry = entries[nextIndex];
+
+      if (nextEntry?.message.role === MESSAGE_ROLE.USER) {
+        break;
+      }
+
+      if (nextEntry?.message.role === MESSAGE_ROLE.ASSISTANT) {
+        return entry;
+      }
+    }
+
+    return {
+      ...entry,
+      emphasizeAssistantText: true,
+    };
+  });
 }
 
 export function MessageList({
@@ -180,6 +219,7 @@ export function MessageList({
 
         {entries.map((entry) => (
           <MessageItem
+            emphasizeAssistantText={entry.emphasizeAssistantText}
             key={entry.id}
             message={entry.message}
             toolContinuationParts={entry.toolContinuationParts}

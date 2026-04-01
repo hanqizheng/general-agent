@@ -7,6 +7,7 @@ import { Check, Copy } from "lucide-react";
 import type {
   UIAttachmentPart,
   UIArtifactPart,
+  UIInvokedCommand,
   UIMessage,
   UIMessagePart,
   UIToolPart,
@@ -28,6 +29,7 @@ import { ToolRenderer } from "./tool-renderer";
 
 interface MessageItemProps {
   message: UIMessage;
+  emphasizeAssistantText?: boolean;
   toolContinuationParts?: UIToolPart[];
 }
 
@@ -105,11 +107,46 @@ function mergeStructuredArtifactIntoTool(
   };
 }
 
+function stripLeadingSlashCommand(text: string, commands: UIInvokedCommand[]) {
+  const firstCommand = commands[0];
+  if (!firstCommand || firstCommand.source !== "slash") {
+    return text;
+  }
+
+  const trimmed = text.trimStart();
+  const commandPrefix = `/${firstCommand.name}`;
+  if (!trimmed.startsWith(commandPrefix)) {
+    return text;
+  }
+
+  const remainder = trimmed.slice(commandPrefix.length);
+  if (remainder.length > 0 && !/^\s/.test(remainder)) {
+    return text;
+  }
+
+  return remainder.replace(/^\s+/, "");
+}
+
+function buildUserMessageText(message: UIMessage) {
+  const text = message.parts
+    .filter(
+      (part): part is Extract<UIMessagePart, { kind: "text" }> =>
+        part.kind === MESSAGE_PART_KIND.TEXT,
+    )
+    .map((part) => part.text)
+    .join("\n\n");
+
+  return stripLeadingSlashCommand(text, message.invokedCommands);
+}
+
 function AssistantTextPart({
   part,
+  variant,
 }: {
   part: Extract<UIMessagePart, { kind: "text" }>;
+  variant: "final" | "process";
 }) {
+  const isFinal = variant === "final";
   const hasText = part.text.trim().length > 0;
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
@@ -142,16 +179,22 @@ function AssistantTextPart({
 
   return (
     <section
-      className="min-w-0 overflow-hidden rounded-2xl bg-[rgba(255,252,247,0.92)] px-4 py-3 shadow-[0_16px_40px_rgba(24,24,27,0.06)] sm:px-5 sm:py-4"
+      className={
+        isFinal
+          ? "min-w-0 overflow-hidden rounded-2xl bg-[rgba(255,252,247,0.92)] px-4 py-3 shadow-[0_16px_40px_rgba(24,24,27,0.06)] sm:px-5 sm:py-4"
+          : "min-w-0 px-1 py-1.5"
+      }
       key={`text-${part.partIndex}`}
     >
       {hasText ? (
         <MarkdownRenderer content={part.text} />
       ) : (
-        <div className="text-sm text-stone-500">Working...</div>
+        <div className={`text-sm ${isFinal ? "text-stone-500" : "text-stone-400"}`}>
+          Working...
+        </div>
       )}
 
-      {hasText || part.state === null ? (
+      {isFinal && (hasText || part.state === null) ? (
         <div className="mt-3 flex items-center justify-between gap-3">
           <div className="min-h-5">
             {part.state === null ? (
@@ -183,6 +226,10 @@ function AssistantTextPart({
             </button>
           ) : null}
         </div>
+      ) : part.state === null ? (
+        <div className="mt-2 px-1">
+          <span className="inline-block h-4 w-2 rounded-sm bg-stone-300 align-middle" />
+        </div>
       ) : null}
     </section>
   );
@@ -206,9 +253,32 @@ function renderUserAttachmentParts(parts: UIAttachmentPart[]) {
   );
 }
 
+function renderInlineInvokedCommandTags(commands: UIInvokedCommand[]) {
+  if (commands.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      {commands.map((command, index) => {
+        return (
+          <span
+            className="mr-2 inline-flex max-w-full items-center gap-1 rounded-[8px] bg-emerald-100 px-2 py-0.5 align-middle text-[12px] font-medium text-emerald-950"
+            key={`${command.name}-${index}`}
+            title={command.args || undefined}
+          >
+            <span className="shrink-0">/{command.name}</span>
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 function renderAssistantParts(
   parts: UIMessagePart[],
   toolContinuationParts: UIToolPart[] = [],
+  emphasizeAssistantText = false,
 ) {
   const rendered: ReactElement[] = [];
 
@@ -220,7 +290,13 @@ function renderAssistantParts(
         continue;
       }
 
-      rendered.push(<AssistantTextPart key={`text-${part.partIndex}`} part={part} />);
+      rendered.push(
+        <AssistantTextPart
+          key={`text-${part.partIndex}`}
+          part={part}
+          variant={emphasizeAssistantText ? "final" : "process"}
+        />,
+      );
       continue;
     }
 
@@ -282,6 +358,7 @@ function renderAssistantParts(
 }
 
 export function MessageItem({
+  emphasizeAssistantText = false,
   message,
   toolContinuationParts = [],
 }: MessageItemProps) {
@@ -289,10 +366,6 @@ export function MessageItem({
   const messageWidthClass = isUser
     ? "flex w-full max-w-full flex-col items-end sm:max-w-[85%] lg:max-w-3xl"
     : "w-full max-w-full lg:max-w-4xl";
-  const textParts = message.parts.filter(
-    (part): part is Extract<UIMessagePart, { kind: "text" }> =>
-      part.kind === MESSAGE_PART_KIND.TEXT,
-  );
   const attachmentParts = message.parts.filter(
     (part): part is UIAttachmentPart =>
       part.kind === MESSAGE_PART_KIND.ATTACHMENT,
@@ -301,21 +374,23 @@ export function MessageItem({
   const orderedAssistantParts = renderAssistantParts(
     message.parts,
     toolContinuationParts,
+    emphasizeAssistantText,
   );
   const hasAssistantContent = orderedAssistantParts.length > 0;
+  const userMessageText = buildUserMessageText(message);
 
   return (
     <article
       className={`flex w-full min-w-0 ${isUser ? "justify-end" : "justify-start"}`}
     >
       <div className={`${messageWidthClass} min-w-0`}>
-        <div className="mb-2 flex flex-wrap items-center gap-2 px-1 text-[10px] uppercase tracking-[0.18em] text-stone-500 sm:text-[11px]">
-          {badge ? (
+        {badge ? (
+          <div className="mb-2 flex flex-wrap items-center gap-2 px-1 text-[10px] uppercase tracking-[0.18em] text-stone-500 sm:text-[11px]">
             <span className={`rounded-xl px-2.5 py-1 text-[10px] ${badge.className}`}>
               {badge.label}
             </span>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {isUser ? (
           <div className="flex w-full flex-col items-end gap-2">
@@ -323,19 +398,22 @@ export function MessageItem({
               <div className="w-full">{renderUserAttachmentParts(attachmentParts)}</div>
             ) : null}
             <div className="max-w-full overflow-hidden rounded-3xl bg-zinc-800 px-4 py-3 text-zinc-50 shadow-[0_16px_40px_rgba(24,24,27,0.16)] sm:px-5 sm:py-4">
-              <div className="chat-text-wrap whitespace-pre-wrap text-sm leading-6 sm:text-[15px] sm:leading-7">
-                {textParts.map((part) => part.text).join("\n\n")}
-              </div>
+              {message.invokedCommands.length > 0 || userMessageText.trim().length > 0 ? (
+                <div className="chat-text-wrap whitespace-pre-wrap text-sm leading-6 sm:text-[15px] sm:leading-7">
+                  {renderInlineInvokedCommandTags(message.invokedCommands)}
+                  {userMessageText}
+                </div>
+              ) : null}
             </div>
           </div>
         ) : hasAssistantContent ? (
           <div className="min-w-0 space-y-3">{orderedAssistantParts}</div>
         ) : message.isStreaming ? (
-          <div className="min-w-0 overflow-hidden rounded-[14px] bg-white/70 px-4 py-3 text-sm text-stone-500 shadow-[0_12px_30px_rgba(24,24,27,0.05)]">
+          <div className="min-w-0 px-1 py-1 text-sm text-stone-500">
             Working...
           </div>
         ) : (
-          <div className="min-w-0 overflow-hidden rounded-[14px] bg-white/65 px-4 py-3 text-sm text-stone-500 shadow-[0_12px_30px_rgba(24,24,27,0.05)]">
+          <div className="min-w-0 px-1 py-1 text-sm text-stone-500">
             {message.parts.length > 0 ? "No visible assistant text." : "No assistant content."}
           </div>
         )}
