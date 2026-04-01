@@ -14,8 +14,13 @@ import {
 
 type LangChainMessage = HumanMessage | AIMessage | ToolMessage | SystemMessage;
 
+interface AnthropicMessageCompileOptions {
+  enableDocumentCitations?: boolean;
+}
+
 function toAnthropicDocumentBlock(
   block: Extract<LLMContentBlock, { type: "attachment" }>,
+  options?: AnthropicMessageCompileOptions,
 ) {
   if (!block.source || block.source.provider !== ATTACHMENT_PROVIDER.ANTHROPIC) {
     throw new Error(
@@ -55,15 +60,20 @@ function toAnthropicDocumentBlock(
     type: "document",
     source,
     title: block.originalName,
-    citations: {
-      enabled: true,
-    },
+    ...(options?.enableDocumentCitations === false
+      ? {}
+      : {
+          citations: {
+            enabled: true,
+          },
+        }),
   };
 }
 
 export function toAnthropicMessages(
   messages: LLMMessage[],
   systemPrompt?: string,
+  options?: AnthropicMessageCompileOptions,
 ): LangChainMessage[] {
   const result: LangChainMessage[] = [];
 
@@ -85,7 +95,7 @@ export function toAnthropicMessages(
         }
 
         if (block.type === "attachment") {
-          humanBlocks.push(toAnthropicDocumentBlock(block));
+          humanBlocks.push(toAnthropicDocumentBlock(block, options));
           continue;
         }
 

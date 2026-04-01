@@ -89,7 +89,9 @@ export function createAnthropicProvider(
       );
 
       const langChainMessages = [
-        ...toAnthropicMessages(params.messages, params.systemPrompt),
+        ...toAnthropicMessages(params.messages, params.systemPrompt, {
+          enableDocumentCitations: false,
+        }),
         new HumanMessage(
           buildStructuredArtifactInstruction(
             params.contract,
