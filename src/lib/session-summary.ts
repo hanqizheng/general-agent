@@ -16,6 +16,12 @@ export function toSessionSummary(
   };
 }
 
+export function isSessionSummaryVisible(
+  session: Pick<SessionSummaryDto, "lastMessageAt">,
+) {
+  return session.lastMessageAt !== null;
+}
+
 export function applyPatchToSummary(
   summary: SessionSummaryDto,
   patch: SessionPatch,

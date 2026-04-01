@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { sessions } from "@/db/schema";
@@ -73,7 +73,13 @@ export async function listSessionSummaries(userId: string, limit = 50) {
   const rows = await db
     .select()
     .from(sessions)
-    .where(and(eq(sessions.userId, userId), isNull(sessions.deletedAt)))
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        isNull(sessions.deletedAt),
+        isNotNull(sessions.lastMessageAt),
+      ),
+    )
     .orderBy(desc(sessions.lastMessageAt), desc(sessions.createdAt))
     .limit(limit);
 
@@ -84,7 +90,13 @@ export async function findLatestSession(userId: string) {
   const [row] = await db
     .select()
     .from(sessions)
-    .where(and(eq(sessions.userId, userId), isNull(sessions.deletedAt)))
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        isNull(sessions.deletedAt),
+        isNotNull(sessions.lastMessageAt),
+      ),
+    )
     .orderBy(desc(sessions.lastMessageAt), desc(sessions.createdAt))
     .limit(1);
 

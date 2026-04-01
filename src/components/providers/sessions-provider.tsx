@@ -6,6 +6,7 @@ import { useSessions } from "@/hooks/use-sessions";
 import {
   applyPatchToSummary,
   areSessionSummariesEqual,
+  isSessionSummaryVisible,
   type SessionPatch,
   toSessionSummary,
 } from "@/lib/session-summary";
@@ -40,6 +41,12 @@ export function SessionsProvider({
         const summary = toSessionSummary(nextSession);
         const existing = current.find((item) => item.id === nextSession.id);
 
+        if (!isSessionSummaryVisible(summary)) {
+          return existing
+            ? current.filter((item) => item.id !== nextSession.id)
+            : current;
+        }
+
         if (!existing) {
           return [summary, ...current];
         }
@@ -66,6 +73,10 @@ export function SessionsProvider({
         }
 
         const nextSummary = applyPatchToSummary(existing, patch);
+        if (!isSessionSummaryVisible(nextSummary)) {
+          return current.filter((item) => item.id !== patch.id);
+        }
+
         if (areSessionSummariesEqual(existing, nextSummary)) {
           return current;
         }

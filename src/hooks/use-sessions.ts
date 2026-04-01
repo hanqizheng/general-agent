@@ -10,9 +10,16 @@ import {
 
 import { parseJsonResponse } from "@/lib/client-auth";
 import type { SessionDetailDto, SessionSummaryDto } from "@/lib/session-dto";
+import { isSessionSummaryVisible } from "@/lib/session-summary";
+
+function filterVisibleSessions(sessions: SessionSummaryDto[]) {
+  return sessions.filter(isSessionSummaryVisible);
+}
 
 export function useSessions(initialSessions: SessionSummaryDto[] = []) {
-  const [sessions, setSessions] = useState<SessionSummaryDto[]>(initialSessions);
+  const [sessions, setSessions] = useState<SessionSummaryDto[]>(
+    filterVisibleSessions(initialSessions),
+  );
   const [isLoading, setIsLoading] = useState(initialSessions.length === 0);
   const versionRef = useRef(0);
 
@@ -45,7 +52,7 @@ export function useSessions(initialSessions: SessionSummaryDto[] = []) {
     );
 
     if (versionRef.current === requestVersion) {
-      updateSessions(payload.sessions);
+      updateSessions(filterVisibleSessions(payload.sessions));
     }
 
     setIsLoading(false);
@@ -67,7 +74,7 @@ export function useSessions(initialSessions: SessionSummaryDto[] = []) {
         );
 
         if (!cancelled && versionRef.current === requestVersion) {
-          updateSessions(payload.sessions);
+          updateSessions(filterVisibleSessions(payload.sessions));
           setIsLoading(false);
           return;
         }
@@ -97,7 +104,11 @@ export function useSessions(initialSessions: SessionSummaryDto[] = []) {
     const payload = await parseJsonResponse<{ session: SessionDetailDto }>(
       response,
     );
-    updateSessions((current) => [payload.session, ...current]);
+    updateSessions((current) =>
+      isSessionSummaryVisible(payload.session)
+        ? [payload.session, ...current]
+        : current,
+    );
     return payload.session;
   }, [updateSessions]);
 

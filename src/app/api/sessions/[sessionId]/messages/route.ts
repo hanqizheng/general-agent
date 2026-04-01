@@ -221,10 +221,14 @@ export async function POST(
       createdUserMessageId = userMessage.id;
       shouldGenerateSessionPresentation = userMessage.sequence === 1;
       responseSession = {
-        ...responseSession,
-        activeRunId: sessionRow.activeRunId,
+        id: sessionRow.id,
+        title: sessionRow.title,
         status: sessionRow.status,
-      } as SessionDetailDto;
+        createdAt: sessionRow.createdAt.toISOString(),
+        lastMessageAt: sessionRow.lastMessageAt?.toISOString() ?? null,
+        activeRunId: sessionRow.activeRunId,
+        workspaceRoot: sessionRow.workspaceRoot,
+      };
     });
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "SESSION_NOT_FOUND") {
