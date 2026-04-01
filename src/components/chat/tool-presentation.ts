@@ -140,6 +140,22 @@ export interface ToolPresentation {
 }
 
 export function getToolPresentation(part: UIToolPart): ToolPresentation {
+  if (part.toolName === "skill") {
+    const skillName =
+      typeof part.input?.skill === "string" ? part.input.skill : null;
+    const meta: string[] = [];
+
+    if (part.durationMs !== undefined) {
+      meta.push(`${part.durationMs}ms`);
+    }
+
+    return {
+      toolLabel: "Skill",
+      actionLabel: skillName ? `Use /${skillName}` : "Load prompt command",
+      meta,
+    };
+  }
+
   const toolLabel = part.toolName ? humanizeToken(part.toolName) : "Tool";
   const inputSummary = summarizeInput(part.input);
   const updateSummary = summarizeUpdates(part);

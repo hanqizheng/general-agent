@@ -7,7 +7,9 @@ import { Plus } from "lucide-react";
 import { MAX_MESSAGE_ATTACHMENTS } from "@/lib/attachment-constants";
 import type { SendMessageInput } from "@/lib/session-dto";
 import { useComposerAttachments } from "@/hooks/use-composer-attachments";
+import { useCommands } from "@/hooks/use-commands";
 import { AttachmentCardList } from "./attachment-card-list";
+import { CommandPopover } from "./command-popover";
 
 interface InputAreaProps {
   sessionId: string | null;
@@ -16,6 +18,57 @@ interface InputAreaProps {
   isStopping: boolean;
   onAbort: () => void | Promise<void>;
   onSend: (input: SendMessageInput) => Promise<void>;
+}
+
+interface SlashState {
+  filter: string;
+  startIndex: number;
+  endIndex: number;
+  highlightIndex: number;
+}
+
+function getLeadingSlashState(
+  value: string,
+  cursorPos: number,
+  commandNames: string[],
+): SlashState | null {
+  const firstNonWhitespaceIndex = value.search(/\S/);
+  if (
+    firstNonWhitespaceIndex === -1 ||
+    value[firstNonWhitespaceIndex] !== "/" ||
+    cursorPos < firstNonWhitespaceIndex + 1
+  ) {
+    return null;
+  }
+
+  let tokenEnd = firstNonWhitespaceIndex + 1;
+  while (tokenEnd < value.length && !/\s/.test(value[tokenEnd] ?? "")) {
+    tokenEnd += 1;
+  }
+
+  if (cursorPos > tokenEnd) {
+    return null;
+  }
+
+  const partial = value
+    .slice(firstNonWhitespaceIndex + 1, cursorPos)
+    .toLowerCase();
+
+  if (!/^[a-z0-9-]*$/.test(partial)) {
+    return null;
+  }
+
+  const hasMatches = commandNames.some((name) => name.includes(partial));
+  if (!hasMatches) {
+    return null;
+  }
+
+  return {
+    filter: partial,
+    startIndex: firstNonWhitespaceIndex,
+    endIndex: tokenEnd,
+    highlightIndex: 0,
+  };
 }
 
 export function InputArea({
@@ -28,9 +81,12 @@ export function InputArea({
 }: InputAreaProps) {
   const [text, setText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [slashState, setSlashState] = useState<SlashState | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previousSessionIdRef = useRef<string | null>(sessionId);
+
+  const { commands } = useCommands();
   const {
     drafts,
     attachmentSlotCount,
@@ -44,6 +100,12 @@ export function InputArea({
     retryAttachment,
     clearAttachments,
   } = useComposerAttachments(sessionId, ensureSessionId);
+
+  const filteredCommands = slashState
+    ? commands.filter((command) =>
+        command.name.includes(slashState.filter.toLowerCase()),
+      )
+    : [];
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -62,14 +124,68 @@ export function InputArea({
     if (previousSessionId && sessionId && previousSessionId !== sessionId) {
       setText("");
       setIsSubmitting(false);
+      setSlashState(null);
       return;
     }
 
     if (previousSessionId && sessionId === null) {
       setText("");
       setIsSubmitting(false);
+      setSlashState(null);
     }
   }, [sessionId]);
+
+  const updateSlashState = (value: string, cursorPos: number) => {
+    const nextState = getLeadingSlashState(
+      value,
+      cursorPos,
+      commands.map((command) => command.name),
+    );
+
+    if (!nextState) {
+      setSlashState(null);
+      return;
+    }
+
+    const nextFiltered = commands.filter((command) =>
+      command.name.includes(nextState.filter),
+    );
+
+    setSlashState((prev) => ({
+      ...nextState,
+      highlightIndex:
+        nextFiltered.length === 0
+          ? 0
+          : prev
+            ? Math.min(prev.highlightIndex, nextFiltered.length - 1)
+            : 0,
+    }));
+  };
+
+  const selectCommand = (name: string) => {
+    if (!slashState) {
+      return;
+    }
+
+    const before = text.slice(0, slashState.startIndex);
+    const after = text.slice(slashState.endIndex).replace(/^\s*/, "");
+    const inserted = `/${name} `;
+    const nextText = after.length > 0 ? `${before}${inserted}${after}` : `${before}${inserted}`;
+    const nextCursorPos = before.length + inserted.length;
+
+    setText(nextText);
+    setSlashState(null);
+
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        return;
+      }
+
+      textarea.focus();
+      textarea.setSelectionRange(nextCursorPos, nextCursorPos);
+    });
+  };
 
   const submit = async () => {
     const next = text.trim();
@@ -92,6 +208,7 @@ export function InputArea({
         attachments: readyAttachmentRefs,
       });
       setText("");
+      setSlashState(null);
       clearAttachments();
     } catch {
       // Keep text and attachments in place so the user can retry immediately.
@@ -132,7 +249,7 @@ export function InputArea({
 
   return (
     <div className="mx-auto w-full max-w-4xl">
-      <div className="rounded-[28px] bg-[rgba(255,252,247,0.9)] p-3 shadow-[0_20px_60px_rgba(24,24,27,0.08)] backdrop-blur-xl sm:rounded-[30px] sm:p-4">
+      <div className="relative rounded-[28px] bg-[rgba(255,252,247,0.9)] p-3 shadow-[0_20px_60px_rgba(24,24,27,0.08)] backdrop-blur-xl sm:rounded-[30px] sm:p-4">
         <input
           accept="application/pdf,.pdf"
           className="hidden"
@@ -159,12 +276,76 @@ export function InputArea({
           </div>
         ) : null}
 
+        {slashState ? (
+          <CommandPopover
+            commands={commands}
+            filter={slashState.filter}
+            selectedIndex={slashState.highlightIndex}
+            onSelect={selectCommand}
+            onClose={() => setSlashState(null)}
+          />
+        ) : null}
+
         <textarea
           ref={textareaRef}
           className="min-h-22 w-full resize-none rounded-[20px] bg-stone-100/70 px-4 py-3 text-sm leading-6 text-stone-900 outline-none placeholder:text-stone-400 sm:min-h-24 sm:rounded-[22px] sm:text-[15px] sm:leading-7"
           disabled={busy || isSubmitting}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value;
+            setText(value);
+            updateSlashState(value, event.target.selectionStart ?? value.length);
+          }}
           onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) {
+              return;
+            }
+
+            if (slashState && filteredCommands.length > 0) {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setSlashState((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        highlightIndex:
+                          (prev.highlightIndex + 1) % filteredCommands.length,
+                      }
+                    : prev,
+                );
+                return;
+              }
+
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setSlashState((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        highlightIndex:
+                          (prev.highlightIndex - 1 + filteredCommands.length) %
+                          filteredCommands.length,
+                      }
+                    : prev,
+                );
+                return;
+              }
+
+              if (event.key === "Enter") {
+                event.preventDefault();
+                const command = filteredCommands[slashState.highlightIndex];
+                if (command) {
+                  selectCommand(command.name);
+                }
+                return;
+              }
+
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setSlashState(null);
+                return;
+              }
+            }
+
             if (
               event.key === "Enter" &&
               !event.shiftKey &&

@@ -104,12 +104,20 @@ export type UIMessagePart =
   | UIToolPart
   | UIArtifactPart;
 
+export interface UIInvokedCommand {
+  name: string;
+  args: string;
+  source: "slash";
+  type: "prompt";
+}
+
 export interface UIMessage {
   messageId: string;
   role: UIMessageRole;
   parts: UIMessagePart[];
   isStreaming: boolean;
   status: UIMessageStatus;
+  invokedCommands: UIInvokedCommand[];
 }
 
 export interface ComposerAttachmentDraft {
