@@ -12,6 +12,17 @@ import type {
   UIMessageRole,
 } from "./chat-types";
 
+export interface InvokedCommandDto {
+  name: string;
+  args: string;
+  source: "slash";
+  type: "prompt";
+}
+
+export interface TranscriptMessageMetadataDto {
+  invokedCommands: InvokedCommandDto[];
+}
+
 export interface SessionSummaryDto {
   id: string;
   title: string;
@@ -43,6 +54,7 @@ export interface TranscriptMessageDto {
   createdAt: string;
   completedAt: string | null;
   parts: TranscriptPartDto[];
+  metadata: TranscriptMessageMetadataDto;
 }
 
 export interface SessionMessagesPageDto {

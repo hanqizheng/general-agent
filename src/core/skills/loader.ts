@@ -5,26 +5,25 @@ import matter from "gray-matter";
 
 import { createLogger } from "@/lib/logger";
 
-import { SkillMetadataSchema, type SkillEntry } from "./types";
+import {
+  PromptCommandFrontmatterSchema,
+  type PromptCommandDefinition,
+} from "./types";
 
-const logger = createLogger("skill-loader");
+const logger = createLogger("prompt-command-loader");
 
-/**
- * 扫描 skillRoot 目录下所有的 SKILL.md 解析 frontmatter metadata
- * 提取 name + description，不读取 body（渐进式加载）。
- */
-export async function loadSkills(skillsRoot: string): Promise<SkillEntry[]> {
-  // 目录不存在则返回空
-
+export async function loadCommands(
+  commandsRoot: string,
+): Promise<PromptCommandDefinition[]> {
   try {
-    await fs.access(skillsRoot);
+    await fs.access(commandsRoot);
   } catch {
-    logger.debug("Skills directory not found, skipping", { skillsRoot });
+    logger.debug("Commands directory not found, skipping", { commandsRoot });
     return [];
   }
 
   const files = await fg("**/SKILL.md", {
-    cwd: skillsRoot,
+    cwd: commandsRoot,
     absolute: true,
     onlyFiles: true,
   });
@@ -34,36 +33,40 @@ export async function loadSkills(skillsRoot: string): Promise<SkillEntry[]> {
     return [];
   }
 
-  const skills: SkillEntry[] = [];
+  const commands: PromptCommandDefinition[] = [];
 
-  for (const filePath of files) {
+  for (const sourcePath of files) {
     try {
-      const raw = await fs.readFile(filePath, "utf-8");
-      // 只取 frontmatter
+      const raw = await fs.readFile(sourcePath, "utf-8");
       const { data } = matter(raw);
-
-      const result = SkillMetadataSchema.safeParse(data);
+      const result = PromptCommandFrontmatterSchema.safeParse(data);
 
       if (!result.success) {
-        logger.warn(`Invalid SKILL.md: ${filePath}`, {
+        logger.warn(`Invalid SKILL.md: ${sourcePath}`, {
           errors: result.error.issues,
         });
         continue;
       }
 
-      skills.push({
-        metadata: result.data,
-        filePath,
-        dirPath: path.dirname(filePath),
+      commands.push({
+        name: result.data.name,
+        description: result.data.description,
+        whenToUse: result.data.when_to_use?.trim() ?? result.data.description,
+        usage: result.data.arguments?.trim() ?? null,
+        type: "prompt",
+        userInvocable: result.data.user_invocable ?? true,
+        modelInvocable: result.data.model_invocable ?? true,
+        sourcePath,
+        sourceDir: path.dirname(sourcePath),
       });
 
-      logger.debug(`Loaded skill: ${result.data.name}`);
+      logger.debug(`Loaded command: ${result.data.name}`);
     } catch (error) {
-      logger.warn(`Failed to parse SKILL.md: ${filePath}`, {
+      logger.warn(`Failed to parse SKILL.md: ${sourcePath}`, {
         error: (error as Error).message,
       });
     }
   }
 
-  return skills;
+  return commands.sort((left, right) => left.name.localeCompare(right.name));
 }

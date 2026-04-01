@@ -12,11 +12,13 @@ import { db } from "@/db";
 import { messageParts, messages } from "@/db/schema";
 import type {
   MessagePartPayload,
+  MessagePartKindValue,
   MessagePartStateValue,
   MessageRoleValue,
   MessageStatusValue,
   MessageVisibilityValue,
 } from "@/db/schema";
+import { projectPublicPromptCommandInvocations } from "@/core/skills";
 import {
   allocateNextSequence,
   maybePromoteSessionTitle,
@@ -46,6 +48,7 @@ interface InsertTextMessageInput {
   visibility: MessageVisibilityValue;
   status: MessageStatusValue;
   text: string;
+  metadata?: Record<string, unknown>;
 }
 
 function mapPartKind(kind: typeof messageParts.$inferSelect.kind): TranscriptPartDto["kind"] {
@@ -104,6 +107,9 @@ function toTranscriptMessages(
     parts: (partsByMessageId.get(row.id) ?? []).sort(
       (a, b) => a.partIndex - b.partIndex,
     ),
+    metadata: {
+      invokedCommands: projectPublicPromptCommandInvocations(row.metadata),
+    },
   }));
 }
 
@@ -129,6 +135,7 @@ export async function insertVisibleUserMessage(
       role: "user",
       visibility: "visible",
       status: MESSAGE_STATUS.COMPLETED,
+      metadata: input.metadata ?? {},
       createdAt: now,
       completedAt: now,
     })
@@ -467,6 +474,29 @@ export async function hydrateMessageById(messageId: string) {
   return toTranscriptMessages([message], partRows)[0];
 }
 
+export async function getExecutionMessageById(messageId: string) {
+  const [message] = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+
+  if (!message) {
+    throw new Error(`Message not found: ${messageId}`);
+  }
+
+  const parts = await db
+    .select()
+    .from(messageParts)
+    .where(eq(messageParts.messageId, messageId))
+    .orderBy(asc(messageParts.partIndex));
+
+  return {
+    message,
+    parts,
+  };
+}
+
 export async function getCompletedTranscript(sessionId: string) {
   const rows = await db
     .select()
@@ -490,6 +520,24 @@ export async function getCompletedTranscript(sessionId: string) {
       : [];
 
   return { messages: rows, parts: partRows };
+}
+
+export interface ExecutionMessageContentPart {
+  partIndex: number;
+  kind: MessagePartKindValue;
+  textContent: string | null;
+  payload: Record<string, unknown> | null;
+}
+
+export function messagePartRowToExecutionContentPart(
+  part: typeof messageParts.$inferSelect,
+): ExecutionMessageContentPart {
+  return {
+    partIndex: part.partIndex,
+    kind: part.kind,
+    textContent: part.textContent,
+    payload: part.payload as Record<string, unknown> | null,
+  };
 }
 
 function extractVisibleText(

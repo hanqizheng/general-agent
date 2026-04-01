@@ -1,5 +1,9 @@
 import type { LLMContentBlock, LLMMessage } from "@/core/provider/base";
 import { artifactPayloadToContentBlock } from "@/core/agent/artifacts";
+import {
+  prependExpandedPromptCommands,
+  readStoredPromptCommandInvocations,
+} from "@/core/skills";
 import { listSessionActiveAttachments } from "@/db/repositories/attachment-repository";
 import { getCompletedTranscript } from "@/db/repositories/message-repository";
 import type {
@@ -13,6 +17,7 @@ interface TranscriptMessage {
   turnIndex: number | null;
   role: "user" | "assistant";
   visibility: "visible" | "internal";
+  metadata: Record<string, unknown>;
 }
 
 interface TranscriptPart {
@@ -191,9 +196,12 @@ export async function assembleSessionContext(
     }
 
     const parts = partsByMessageId.get(message.id) ?? [];
-    const content = buildVisibleContent(parts, {
-      replayableAttachmentIds,
-    });
+    const content = prependExpandedPromptCommands(
+      buildVisibleContent(parts, {
+        replayableAttachmentIds,
+      }),
+      readStoredPromptCommandInvocations(message.metadata),
+    );
 
     if (message.role === "user") {
       result.push({

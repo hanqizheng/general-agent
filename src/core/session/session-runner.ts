@@ -6,8 +6,9 @@ import type { LoopEndReason } from "@/core/events/types";
 import { db } from "@/db";
 import { finalizeRun, markRunRunning } from "@/db/repositories/run-repository";
 import {
-  hydrateMessageById,
+  getExecutionMessageById,
   markRunMessagesInterrupted,
+  messagePartRowToExecutionContentPart,
 } from "@/db/repositories/message-repository";
 import { markSessionRunState } from "@/db/repositories/session-repository";
 import { MESSAGE_STATUS, SESSION_STATUS } from "@/lib/constants";
@@ -22,11 +23,15 @@ import { liveSessionRegistry } from "./live-session-registry";
 import { DbSessionProjector } from "./db-session-projector";
 import {
   assembleSessionContext,
-  transcriptMessageToLLMMessage,
+  buildVisibleContent,
 } from "./context-assembler";
 import { maybeGenerateSessionPresentation } from "./presentation-generator";
+import {
+  prependExpandedPromptCommands,
+  readStoredPromptCommandInvocations,
+} from "@/core/skills";
+import type { LLMMessage } from "@/core/provider/base";
 import type { SessionRunSetup } from "./run-setup";
-import type { TranscriptMessageDto } from "@/lib/session-dto";
 
 interface StartSessionRunParams {
   sessionId: string;
@@ -57,16 +62,46 @@ function getTerminalStatus(
   return "completed" as const;
 }
 
-function extractAttachmentIds(message: TranscriptMessageDto) {
+function extractAttachmentIds(
+  parts: Array<{
+    kind: string;
+    payload: Record<string, unknown> | null;
+  }>,
+) {
   return Array.from(
     new Set(
-      message.parts.flatMap((part) =>
-        part.kind === "attachment" && typeof part.payload.attachmentId === "string"
+      parts.flatMap((part) =>
+        part.kind === "attachment" && typeof part.payload?.attachmentId === "string"
           ? [part.payload.attachmentId]
           : [],
       ),
     ),
   );
+}
+
+function buildCurrentUserMessage(
+  requestMessage: Awaited<ReturnType<typeof getExecutionMessageById>>,
+): LLMMessage | null {
+  if (
+    requestMessage.message.role !== "user" ||
+    requestMessage.message.visibility !== "visible"
+  ) {
+    return null;
+  }
+
+  const content = prependExpandedPromptCommands(
+    buildVisibleContent(
+      requestMessage.parts.map(messagePartRowToExecutionContentPart),
+    ),
+    readStoredPromptCommandInvocations(requestMessage.message.metadata),
+  );
+
+  return {
+    role: "user",
+    content: content.filter(
+      (block) => block.type === "text" || block.type === "attachment",
+    ),
+  };
 }
 
 export function startSessionRun(params: StartSessionRunParams): Promise<void> {
@@ -98,9 +133,14 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
         );
       });
 
-      const requestMessage = await hydrateMessageById(params.requestMessageId);
-      requestAttachmentIds = extractAttachmentIds(requestMessage);
-      const currentUserMessage = transcriptMessageToLLMMessage(requestMessage);
+      const requestMessage = await getExecutionMessageById(params.requestMessageId);
+      requestAttachmentIds = extractAttachmentIds(
+        requestMessage.parts.map((part) => ({
+          kind: part.kind,
+          payload: part.payload as Record<string, unknown> | null,
+        })),
+      );
+      const currentUserMessage = buildCurrentUserMessage(requestMessage);
       if (!currentUserMessage || currentUserMessage.role !== "user") {
         throw new AppError(
           "Run request message is missing",
@@ -124,6 +164,7 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
           modelFamily: params.setup.model,
         },
       );
+
       loopStarted = true;
       const result = await runAgentLoop({
         emitter,

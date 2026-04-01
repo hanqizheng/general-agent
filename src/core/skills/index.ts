@@ -1,3 +1,16 @@
-export { loadSkills } from "./loader";
-export { buildSkillsXml } from "./injector";
-export type { SkillMetadata, SkillEntry } from "./types";
+export { loadCommands } from "./loader";
+export {
+  buildCommandsXml,
+  expandPromptCommand,
+  parseLeadingSlashCommand,
+  prependExpandedPromptCommands,
+  projectPublicPromptCommandInvocations,
+  readStoredPromptCommandInvocations,
+  writePromptCommandMetadata,
+} from "./injector";
+export type {
+  PromptCommandDefinition,
+  PromptCommandInvocationSource,
+  PublicPromptCommandInvocation,
+  StoredPromptCommandInvocation,
+} from "./types";
