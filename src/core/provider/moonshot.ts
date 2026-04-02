@@ -1,21 +1,14 @@
 // Moonshot provider — Kimi via OpenAI-compatible API
 
 import { ChatOpenAI } from "@langchain/openai";
-import { HumanMessage } from "@langchain/core/messages";
 import type { AIMessageChunk } from "@langchain/core/messages";
 import type {
   LLMProvider,
   LLMStreamParams,
   LLMStreamChunk,
-  LLMStructuredGenerationParams,
   LLMToolDefinition,
 } from "./base";
 import { toLangChainMessages } from "./converters";
-import {
-  buildStructuredArtifactInstruction,
-  buildStructuredArtifactSchema,
-  normalizeStructuredArtifactResult,
-} from "./structured";
 
 interface MoonshotProviderOptions {
   apiKey: string;
@@ -64,36 +57,6 @@ export function createMoonshotProvider(
 
       return transformStream(stream);
     },
-
-    async generateStructured(params: LLMStructuredGenerationParams) {
-      const llm = new ChatOpenAI({
-        apiKey,
-        configuration: { baseURL },
-        model: defaultModel,
-        maxTokens: 4096,
-        temperature: 0,
-      });
-
-      const structuredLlm = llm.withStructuredOutput(
-        buildStructuredArtifactSchema(params.contract),
-      );
-
-      const langChainMessages = [
-        ...toLangChainMessages(params.messages, params.systemPrompt),
-        new HumanMessage(
-          buildStructuredArtifactInstruction(
-            params.contract,
-            params.instruction,
-          ),
-        ),
-      ];
-
-      const result = await structuredLlm.invoke(langChainMessages, {
-        signal: params.signal,
-      });
-
-      return normalizeStructuredArtifactResult(result);
-    },
   };
 }
 
@@ -110,7 +73,11 @@ function toLangChainTool(tool: LLMToolDefinition) {
 async function* transformStream(
   stream: AsyncIterable<AIMessageChunk>,
 ): AsyncIterable<LLMStreamChunk> {
+  let accumulated: AIMessageChunk | null = null;
+
   for await (const chunk of stream) {
+    accumulated = accumulated ? accumulated.concat(chunk) : chunk;
+
     // 文本内容 — OpenAI 兼容格式通常是字符串
     if (typeof chunk.content === "string" && chunk.content.length > 0) {
       yield { type: "text_delta", text: chunk.content };
@@ -151,5 +118,16 @@ async function* transformStream(
         outputTokens: chunk.usage_metadata.output_tokens,
       };
     }
+  }
+
+  // 提取 stop reason —— OpenAI 兼容 API 通过 response_metadata.finish_reason 暴露
+  const finishReason =
+    (accumulated?.response_metadata as { finish_reason?: string } | undefined)
+      ?.finish_reason;
+
+  if (finishReason) {
+    // 统一为 Anthropic 风格命名（"length" → "max_tokens"），方便上层统一判断
+    const stopReason = finishReason === "length" ? "max_tokens" : finishReason;
+    yield { type: "stop", stopReason };
   }
 }

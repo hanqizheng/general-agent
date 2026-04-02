@@ -32,7 +32,7 @@ export async function prepareSessionRunSetup(
   const skillsRoot = path.resolve(process.cwd(), "src/skills");
   const contractRegistry = await loadArtifactContracts(getDefaultContractsRoot());
   const commands = await loadCommands(skillsRoot);
-  const toolRegistry = createDefaultToolRegistry({ commands });
+  const toolRegistry = createDefaultToolRegistry({ commands, contractRegistry });
   const commandsXml = buildCommandsXml(
     commands.filter((command) => command.modelInvocable),
   );
