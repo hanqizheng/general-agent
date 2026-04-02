@@ -118,7 +118,12 @@ export function startSessionRun(params: StartSessionRunParams): Promise<void> {
     liveSessionRegistry.broadcast(params.sessionId, event);
     projectionQueue = projectionQueue
       .then(() => projector.project(event))
-      .catch(() => undefined);
+      .catch((err) => {
+        console.error(
+          `[session:${params.sessionId}] projection error for event "${event.type}":`,
+          err instanceof Error ? err.message : err,
+        );
+      });
   });
 
   const runPromise = (async () => {
