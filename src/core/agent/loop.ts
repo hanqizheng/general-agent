@@ -1,14 +1,13 @@
-import { DEFAULT_MAX_TURNS } from "@/lib/constants";
+import { DEFAULT_MAX_TURNS, DOOM_LOOP_THRESHOLD } from "@/lib/constants";
 import { isAbortError } from "@/lib/errors";
-import { MESSAGE_PART_END_STATE, MESSAGE_PART_KIND, MESSAGE_ROLE } from "@/lib/constants";
-import { genMessageId, genTurnId } from "@/lib/id";
+import { MESSAGE_ROLE } from "@/lib/constants";
+import { genTurnId } from "@/lib/id";
 
-import {
-  artifactPayloadToContentBlock,
-  buildArtifactPayload,
-  hasArtifactForContract,
-} from "./artifacts";
+import { hasArtifactForContract } from "./artifacts";
 import { buildContext } from "./context";
+import { createDoomLoopTracker } from "./doom-loop";
+import { trimMessagesToFitBudget } from "./token-budget";
+import type { ContextWindowConfig } from "./token-budget";
 import type { AgentLoopResult, AgentLoopStartParams } from "./types";
 import type { LoopEndReason } from "../events/types";
 import {
@@ -18,6 +17,9 @@ import {
   TURN_END_REASON,
 } from "../events/constants";
 import { executeTurn } from "./turn";
+
+/** 输出截断后最多续接几次 */
+const MAX_TRUNCATION_RECOVERIES = 3;
 
 export async function runAgentLoop(
   params: AgentLoopStartParams,
@@ -34,6 +36,7 @@ export async function runAgentLoop(
     toolRegistry,
     contractRegistry,
     targetArtifactContractId,
+    contextWindowConfig,
   } = params;
 
   emitter.emit({
@@ -41,12 +44,14 @@ export async function runAgentLoop(
     status: SESSION_STATUS.BUSY,
   });
 
-  let messages = buildContext(history, userContent);
+  const messages = buildContext(history, userContent);
   let turnCount = 0;
 
   let endReason: LoopEndReason = LOOP_END_REASON.COMPLETE;
 
   const tools = toolRegistry?.toLLMToolDefinitions();
+  const doomLoopTracker = createDoomLoopTracker(DOOM_LOOP_THRESHOLD);
+  let truncationRecoveries = 0;
 
   emitter.emit({ type: "loop.start" });
 
@@ -63,11 +68,18 @@ export async function runAgentLoop(
     emitter.emit({ type: "turn.start", turnId });
 
     try {
+      // 每次 turn 前检查消息是否超出上下文窗口预算，必要时裁剪
+      const trimmedMessages = trimMessagesToFitBudget(
+        messages,
+        systemPrompt,
+        contextWindowConfig,
+      );
+
       const result = await executeTurn({
         provider,
         emitter,
         streamParams: {
-          messages,
+          messages: trimmedMessages,
           systemPrompt,
           tools,
           signal: interruptSignal,
@@ -77,10 +89,63 @@ export async function runAgentLoop(
         contractRegistry,
       });
 
-      messages = [...messages, result.assistantMessage];
+      messages.push(result.assistantMessage);
 
       if (result.toolResultMessage) {
-        messages = [...messages, result.toolResultMessage];
+        messages.push(result.toolResultMessage);
+      }
+
+      // Doom loop 检测：连续 N 次相同工具+相同参数+全部报错 → 提前终止
+      if (doomLoopTracker.track(result)) {
+        emitter.emit({
+          type: SESSION_EVENT_TYPE.ERROR,
+          error: {
+            code: "DOOM_LOOP",
+            message: `Doom loop detected: the same tool call has failed ${DOOM_LOOP_THRESHOLD} times consecutively with identical parameters. Stopping to avoid wasting turns.`,
+            recoverable: false,
+          },
+        });
+
+        emitter.emit({
+          type: "turn.end",
+          turnId,
+          reason: TURN_END_REASON.ERROR,
+        });
+
+        endReason = LOOP_END_REASON.DOOM_LOOP;
+        break;
+      }
+
+      // 输出截断恢复：LLM 输出达到 max_tokens 被截断时，注入续接提示让它接着说
+      // 截断的回复已经作为 assistantMessage 加入 messages，LLM 下一轮能看到并续接
+      if (result.truncated && !result.hasToolCalls) {
+        if (truncationRecoveries < MAX_TRUNCATION_RECOVERIES) {
+          truncationRecoveries += 1;
+
+          messages.push({
+            role: MESSAGE_ROLE.USER,
+            content: [
+              {
+                type: "text" as const,
+                text: "Your response was truncated due to output length limits. Please continue exactly where you left off.",
+              },
+            ],
+          });
+
+          emitter.emit({
+            type: "turn.end",
+            turnId,
+            reason: TURN_END_REASON.COMPLETE,
+          });
+
+          continue;
+        }
+        // 超过最大续接次数 → 不再续接，正常结束（保留已有的部分输出）
+      }
+
+      // 如果不是截断恢复的 turn，重置计数器
+      if (!result.truncated) {
+        truncationRecoveries = 0;
       }
 
       if (
@@ -88,59 +153,25 @@ export async function runAgentLoop(
         targetArtifactContractId &&
         !hasArtifactForContract(messages, targetArtifactContractId)
       ) {
-        if (!contractRegistry) {
-          throw new Error("Artifact contract registry is not configured.");
-        }
-
-        const contract = contractRegistry.get(targetArtifactContractId);
-        const structuredResult = await provider.generateStructured({
-          messages,
-          systemPrompt,
-          contract,
-          signal: interruptSignal,
-        });
-        const artifact = buildArtifactPayload(contract, structuredResult, {
-          kind: "assistant",
-          name: "finalize_structured_output",
-        });
-        const artifactMessageId = genMessageId();
-
-        emitter.emit({
-          type: "message.start",
-          messageId: artifactMessageId,
-          role: MESSAGE_ROLE.ASSISTANT,
-        });
-        emitter.emit({
-          type: "message.part.start",
-          messageId: artifactMessageId,
-          partIndex: 0,
-          kind: MESSAGE_PART_KIND.ARTIFACT,
-        });
-        emitter.emit({
-          type: "message.artifact",
-          messageId: artifactMessageId,
-          partIndex: 0,
-          artifact,
-        });
-        emitter.emit({
-          type: "message.part.end",
-          messageId: artifactMessageId,
-          partIndex: 0,
-          kind: MESSAGE_PART_KIND.ARTIFACT,
-          state: MESSAGE_PART_END_STATE.COMPLETE,
-        });
-        emitter.emit({
-          type: "message.end",
-          messageId: artifactMessageId,
+        // LLM 结束回复但没有产出要求的 artifact。
+        // 注入一条提醒消息让 LLM 继续循环，而不是另起一次独立的 LLM 调用。
+        messages.push({
+          role: MESSAGE_ROLE.USER,
+          content: [
+            {
+              type: "text" as const,
+              text: `You must call the structured_output tool with contract_id "${targetArtifactContractId}" to produce the required structured artifact before finishing. Call it now with the data you have gathered.`,
+            },
+          ],
         });
 
-        messages = [
-          ...messages,
-          {
-            role: MESSAGE_ROLE.ASSISTANT,
-            content: [artifactPayloadToContentBlock(artifact)],
-          },
-        ];
+        emitter.emit({
+          type: "turn.end",
+          turnId,
+          reason: TURN_END_REASON.COMPLETE,
+        });
+
+        continue;
       }
 
       emitter.emit({
