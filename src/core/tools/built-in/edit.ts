@@ -24,6 +24,7 @@ export const editTool: ToolDefinition<z.infer<typeof editParams>> = {
   description:
     "Replace an exact string in a workspace file. By default errors if the string appears more than once — pass replace_all=true to replace all occurrences. The old_string must match exactly, including whitespace and indentation.",
   riskLevel: "medium",
+  concurrencySafe: false,
   parameters: editParams,
 
   async execute(input, ctx) {

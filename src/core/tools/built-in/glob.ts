@@ -23,6 +23,7 @@ export const globTool: ToolDefinition<z.infer<typeof globParams>> = {
   description:
     "Find workspace files matching a glob pattern. Returns file paths relative to the workspace root. Use this when you need to locate files before reading or editing them.",
   riskLevel: "low",
+  concurrencySafe: true,
   parameters: globParams,
 
   async execute(input, ctx) {

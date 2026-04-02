@@ -27,6 +27,7 @@ export const readTool: ToolDefinition<z.infer<typeof readParams>> = {
   description:
     "Read a file inside the workspace and return its contents with line numbers. Use this after locating a file with glob or grep, or when you already know the absolute path.",
   riskLevel: "low",
+  concurrencySafe: true,
   parameters: readParams,
 
   async execute(input, ctx) {

@@ -30,6 +30,7 @@ export function createSkillTool(
     description:
       "Load a prompt command by exact name and return its expanded instructions. Use this when a listed prompt command clearly matches the current task. Do not guess command names.",
     riskLevel: "low",
+    concurrencySafe: false,
     parameters: skillParams,
 
     async execute(input) {

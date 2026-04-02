@@ -60,6 +60,7 @@ export function createWebSearchTool(
     description:
       "Search the web using Google Search. Returns a list of search results with titles, URLs, and snippets. Use this when you need up-to-date information from the internet.",
     riskLevel: "low",
+    concurrencySafe: true,
     parameters: webSearchParams,
 
     async execute(input) {
