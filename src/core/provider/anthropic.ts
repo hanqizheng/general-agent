@@ -1,21 +1,14 @@
 // Anthropic provider — standard Anthropic API format
 
 import { ChatAnthropic } from "@langchain/anthropic";
-import { HumanMessage } from "@langchain/core/messages";
 import type { AIMessageChunk } from "@langchain/core/messages";
 import type {
   LLMProvider,
   LLMStreamParams,
   LLMStreamChunk,
-  LLMStructuredGenerationParams,
   LLMToolDefinition,
 } from "./base";
 import { toAnthropicMessages } from "./anthropic-message-compiler";
-import {
-  buildStructuredArtifactInstruction,
-  buildStructuredArtifactSchema,
-  normalizeStructuredArtifactResult,
-} from "./structured";
 
 interface AnthropicProviderOptions {
   apiKey: string;
@@ -70,39 +63,6 @@ export function createAnthropicProvider(
       });
 
       return transformStream(stream);
-    },
-
-    async generateStructured(params: LLMStructuredGenerationParams) {
-      const llm = new ChatAnthropic({
-        apiKey,
-        anthropicApiUrl: baseURL,
-        model: defaultModel,
-        maxTokens: 4096,
-        temperature: 0,
-      });
-
-      const structuredLlm = llm.withStructuredOutput(
-        buildStructuredArtifactSchema(params.contract),
-        {
-          method: "jsonSchema",
-        },
-      );
-
-      const langChainMessages = [
-        ...toAnthropicMessages(params.messages, params.systemPrompt),
-        new HumanMessage(
-          buildStructuredArtifactInstruction(
-            params.contract,
-            params.instruction,
-          ),
-        ),
-      ];
-
-      const result = await structuredLlm.invoke(langChainMessages, {
-        signal: params.signal,
-      });
-
-      return normalizeStructuredArtifactResult(result);
     },
   };
 }
@@ -220,6 +180,17 @@ async function* transformStream(
         blocks,
       };
     }
+  }
+
+  // 提取 stop reason —— Anthropic 通过 additional_kwargs.stop_reason 暴露
+  const stopReason =
+    (accumulated?.additional_kwargs as { stop_reason?: string } | undefined)
+      ?.stop_reason ??
+    (accumulated?.response_metadata as { stop_reason?: string } | undefined)
+      ?.stop_reason;
+
+  if (stopReason) {
+    yield { type: "stop", stopReason };
   }
 }
 

@@ -1,3 +1,4 @@
+import type { ContextWindowConfig } from "./token-budget";
 import type {
   LLMContentBlock,
   LLMMessage,
@@ -24,6 +25,8 @@ export interface AgentLoopStartParams {
   toolContext?: ToolContext;
   contractRegistry?: ArtifactContractRegistry;
   targetArtifactContractId?: string | null;
+  /** 上下文窗口配置，不传则使用默认值（200k context / 8k output） */
+  contextWindowConfig?: ContextWindowConfig;
 }
 
 /** Agent Loop 运行结果 */
@@ -48,6 +51,13 @@ export interface TurnResult {
   assistantMessage: LLMMessage;
   hasToolCalls: boolean;
   toolResultMessage?: LLMMessage;
+  /** API 返回的 token 使用量（如有），用于上下文窗口管理 */
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+  /** 输出是否因 max_tokens 限制被截断（需要续接） */
+  truncated?: boolean;
 }
 
 export interface PendingToolCall {

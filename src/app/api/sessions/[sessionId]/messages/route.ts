@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { db } from "@/db";
+import {
+  expandPromptCommand,
+  parseLeadingSlashCommand,
+  writePromptCommandMetadata,
+} from "@/core/skills";
 import { providerSupportsAttachmentInput } from "@/core/provider/attachment-capabilities";
 import {
   bindMessageToRun,
@@ -24,7 +29,6 @@ import { startSessionRun } from "@/core/session/session-runner";
 import { repairSessionIfStale } from "@/core/session/stale-run-recovery";
 import { requireUserId } from "@/lib/auth-utils";
 import type { AttachmentPartPayload } from "@/lib/attachment-types";
-import type { SessionDetailDto } from "@/lib/session-dto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -134,6 +138,14 @@ export async function POST(
     );
   }
 
+  const parsedCommand = parseLeadingSlashCommand(parsed.data.text, setup.commands);
+  if (parsedCommand.kind === "error") {
+    return NextResponse.json(
+      { error: parsedCommand.message },
+      { status: 400 },
+    );
+  }
+
   const requestedAttachments =
     requestedAttachmentIds.length > 0
       ? await listSessionAttachmentsByIds(sessionId, requestedAttachmentIds)
@@ -175,6 +187,26 @@ export async function POST(
       originalName: attachment.originalName,
     }),
   );
+  const commandInvocations =
+    parsedCommand.kind === "command"
+      ? [
+          {
+            name: parsedCommand.command.name,
+            args: parsedCommand.args,
+            source: "slash" as const,
+            type: "prompt" as const,
+            expandedPrompt: await expandPromptCommand(
+              parsedCommand.command,
+              parsedCommand.args,
+              "slash",
+            ),
+          },
+        ]
+      : [];
+  const userMessageMetadata =
+    commandInvocations.length > 0
+      ? writePromptCommandMetadata(undefined, commandInvocations)
+      : undefined;
 
   let createdRunId: string | null = null;
   let createdUserMessageId: string | null = null;
@@ -199,6 +231,7 @@ export async function POST(
         turnIndex: null,
         text: parsed.data.text,
         attachments: attachmentPayloads,
+        metadata: userMessageMetadata,
       });
 
       const run = await createQueuedRun(tx, {
@@ -221,10 +254,14 @@ export async function POST(
       createdUserMessageId = userMessage.id;
       shouldGenerateSessionPresentation = userMessage.sequence === 1;
       responseSession = {
-        ...responseSession,
-        activeRunId: sessionRow.activeRunId,
+        id: sessionRow.id,
+        title: sessionRow.title,
         status: sessionRow.status,
-      } as SessionDetailDto;
+        createdAt: sessionRow.createdAt.toISOString(),
+        lastMessageAt: sessionRow.lastMessageAt?.toISOString() ?? null,
+        activeRunId: sessionRow.activeRunId,
+        workspaceRoot: sessionRow.workspaceRoot,
+      };
     });
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "SESSION_NOT_FOUND") {

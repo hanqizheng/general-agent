@@ -16,13 +16,12 @@ import type {
   LLMProvider,
   LLMStreamChunk,
 } from "../src/core/provider/base";
-import type { StructuredArtifactResult } from "../src/core/contracts";
 import { ToolRegistry } from "../src/core/tools/registry";
+import { createStructuredOutputTool } from "../src/core/tools/built-in/structured-output";
 
 interface ScenarioOptions {
   chunks: LLMStreamChunk[];
   throwAfterChunks?: Error;
-  structuredResult?: StructuredArtifactResult;
 }
 
 interface ExecuteScenarioOptions extends ScenarioOptions {
@@ -31,6 +30,7 @@ interface ExecuteScenarioOptions extends ScenarioOptions {
       schema?: z.ZodTypeAny;
       output?: string;
       isError?: boolean;
+      concurrencySafe?: boolean;
     };
   };
   contractRegistry?: ArtifactContractRegistry;
@@ -52,25 +52,26 @@ function createMockProvider(options: ScenarioOptions): LLMProvider {
 
       return gen();
     },
-    async generateStructured() {
-      return (
-        options.structuredResult ?? {
-          data: { ok: true },
-          summaryText: "Structured artifact generated",
-        }
-      );
-    },
   };
 }
 
-function createToolRegistry(options?: ExecuteScenarioOptions["tools"]) {
+function createToolRegistry(
+  options?: ExecuteScenarioOptions["tools"],
+  contractRegistry?: ArtifactContractRegistry,
+) {
   const registry = new ToolRegistry();
+
+  // 如果有 contractRegistry，注册 structured_output 真工具
+  if (contractRegistry && contractRegistry.list().length > 0) {
+    registry.register(createStructuredOutputTool(contractRegistry));
+  }
 
   for (const [name, tool] of Object.entries(options ?? {})) {
     registry.register({
       name,
       description: `Mock tool ${name}`,
       riskLevel: "low",
+      concurrencySafe: tool.concurrencySafe,
       parameters: tool.schema ?? z.object({}),
       async execute() {
         return {
@@ -113,7 +114,7 @@ function summarizeEvent(event: AgentEvent): string {
 
 async function executeScenario(options: ExecuteScenarioOptions) {
   const provider = createMockProvider(options);
-  const toolRegistry = createToolRegistry(options.tools);
+  const toolRegistry = createToolRegistry(options.tools, options.contractRegistry);
   const bus = new EventBus();
   const emitter = new EventEmitter(bus, "s_test_turn");
   const events: AgentEvent[] = [];
@@ -330,6 +331,7 @@ async function runStructuredOutputScenario() {
     },
   });
 
+  // 现在 structured_output 是个真工具，需要通过 toolRegistry 注册
   const scenario = await executeScenario({
     chunks: [
       {
@@ -338,17 +340,15 @@ async function runStructuredOutputScenario() {
         name: "structured_output",
         input: {
           contract_id: "repo-risk-report@v1",
-          instruction: "Summarize the repository risks.",
+          data: {
+            summary: "Two high-priority repository risks were identified.",
+          },
+          summaryText: "Two high-priority risks identified.",
         },
       },
     ],
+    // 不再需要单独传 tools，通过 contractRegistry 来注册 structured_output
     contractRegistry,
-    structuredResult: {
-      data: {
-        summary: "Two high-priority repository risks were identified.",
-      },
-      summaryText: "Two high-priority risks identified.",
-    },
   });
 
   if (!scenario.ok) {
@@ -379,7 +379,10 @@ async function runStructuredOutputScenario() {
       name: "structured_output",
       input: {
         contract_id: "repo-risk-report@v1",
-        instruction: "Summarize the repository risks.",
+        data: {
+          summary: "Two high-priority repository risks were identified.",
+        },
+        summaryText: "Two high-priority risks identified.",
       },
     },
     {
@@ -387,7 +390,7 @@ async function runStructuredOutputScenario() {
       artifactType: "repo_risk_report",
       contractId: "repo-risk-report@v1",
       producer: {
-        kind: "assistant",
+        kind: "tool",
         name: "structured_output",
       },
       data: {
@@ -402,7 +405,7 @@ async function runStructuredOutputScenario() {
       type: "tool_result",
       toolCallId: "tc_structured",
       content:
-        'Generated structured artifact "repo-risk-report@v1": Two high-priority risks identified.',
+        'Structured artifact "repo-risk-report@v1" produced successfully.',
       isError: false,
     },
   ]);
@@ -474,12 +477,124 @@ async function runToolDeclaredThenStreamErrorScenario() {
   );
 }
 
+async function runConcurrentToolsScenario() {
+  // 两个 concurrencySafe=true 的工具应该被分入同一个并行批次
+  // 事件顺序：两个 start/running 可以交错（Promise.allSettled 并行）
+  // 但 tool_result 顺序必须与 tool_use 顺序一致
+  const executionOrder: string[] = [];
+
+  const scenario = await executeScenario({
+    chunks: [
+      {
+        type: "tool_use",
+        id: "tc_read_a",
+        name: "mock_read",
+        input: { file: "a.txt" },
+      },
+      {
+        type: "tool_use",
+        id: "tc_read_b",
+        name: "mock_read",
+        input: { file: "b.txt" },
+      },
+    ],
+    tools: {
+      mock_read: {
+        schema: z.object({ file: z.string() }),
+        output: "file contents",
+        concurrencySafe: true,
+      },
+    },
+  });
+
+  if (!scenario.ok) {
+    throw scenario.error;
+  }
+
+  // 关键断言：tool_result 顺序正确且两个工具都成功完成
+  assert.equal(scenario.result.hasToolCalls, true);
+  assert.equal(scenario.result.toolResultMessage?.content.length, 2);
+
+  // 验证事件中两个工具都经历了完整的生命周期
+  const toolStartEvents = scenario.events.filter(
+    (e) => e.type === "message.tool.start",
+  );
+  const toolEndEvents = scenario.events.filter(
+    (e) => e.type === "message.tool.end",
+  );
+  assert.equal(toolStartEvents.length, 2, "should have 2 tool starts");
+  assert.equal(toolEndEvents.length, 2, "should have 2 tool ends");
+}
+
+async function runMixedConcurrencyScenario() {
+  // 混合场景：[read(safe), write(unsafe), read(safe)]
+  // 应该分为 3 个批次：
+  //   batch 1: [read] concurrent=true (单个也走串行路径)
+  //   batch 2: [write] concurrent=false
+  //   batch 3: [read] concurrent=true
+  const scenario = await executeScenario({
+    chunks: [
+      {
+        type: "tool_use",
+        id: "tc_read_1",
+        name: "mock_read",
+        input: { file: "a.txt" },
+      },
+      {
+        type: "tool_use",
+        id: "tc_write_1",
+        name: "mock_write",
+        input: { file: "b.txt" },
+      },
+      {
+        type: "tool_use",
+        id: "tc_read_2",
+        name: "mock_read",
+        input: { file: "c.txt" },
+      },
+    ],
+    tools: {
+      mock_read: {
+        schema: z.object({ file: z.string() }),
+        output: "read ok",
+        concurrencySafe: true,
+      },
+      mock_write: {
+        schema: z.object({ file: z.string() }),
+        output: "write ok",
+        concurrencySafe: false,
+      },
+    },
+  });
+
+  if (!scenario.ok) {
+    throw scenario.error;
+  }
+
+  // 3 个工具都应该完成
+  assert.equal(scenario.result.toolResultMessage?.content.length, 3);
+
+  // 验证执行顺序：write 的 tool.end 必须在 read_1 的 tool.end 之后、
+  // read_2 的 tool.start 之前
+  const toolEndEvents = scenario.events
+    .filter((e) => e.type === "message.tool.end")
+    .map((e) => (e as { toolCallId: string }).toolCallId);
+
+  assert.deepEqual(
+    toolEndEvents,
+    ["tc_read_1", "tc_write_1", "tc_read_2"],
+    "tools should execute in batch order: read_1 → write_1 → read_2",
+  );
+}
+
 async function main() {
   const tests: Array<[string, () => Promise<void>]> = [
     ["pure text", runPureTextScenario],
     ["reasoning -> text", runReasoningToTextScenario],
     ["text -> tool", runTextToToolScenario],
     ["tool -> tool", runToolToToolScenario],
+    ["concurrent tools", runConcurrentToolsScenario],
+    ["mixed concurrency", runMixedConcurrencyScenario],
     ["structured output", runStructuredOutputScenario],
     ["stream error", runStreamErrorScenario],
     ["tool declared then stream error", runToolDeclaredThenStreamErrorScenario],

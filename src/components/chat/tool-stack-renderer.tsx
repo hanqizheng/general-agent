@@ -32,7 +32,7 @@ export function ToolStackRenderer({ parts }: ToolStackRendererProps) {
   const toggleButton = (
     <button
       aria-expanded={isExpanded}
-      className="flex cursor-pointer items-center gap-1 rounded-full bg-white/80 px-3 py-1.5 text-xs font-medium text-stone-600"
+      className="flex cursor-pointer items-center gap-1 rounded-xl bg-white/80 px-3 py-1.5 text-xs font-medium text-stone-600"
       onClick={() => {
         setIsExpanded((value) => !value);
       }}

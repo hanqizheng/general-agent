@@ -5,10 +5,11 @@ import { createHash } from "crypto";
 import type { LLMProvider } from "@/core/provider/base";
 import { getDefaultProviderConfig } from "@/core/provider/default";
 import { buildSystemPrompt } from "@/core/prompt/system";
-import { buildSkillsXml, loadSkills } from "@/core/skills";
+import { buildCommandsXml, loadCommands } from "@/core/skills";
 import { createDefaultToolRegistry } from "@/core/tools/default-registry";
 import type { ToolRegistry } from "@/core/tools/registry";
 import type { ArtifactContractRegistry } from "@/core/contracts";
+import type { PromptCommandDefinition } from "@/core/skills";
 
 export interface SessionRunSetup {
   provider: LLMProvider;
@@ -18,6 +19,7 @@ export interface SessionRunSetup {
   systemPromptHash: string;
   toolRegistry: ToolRegistry;
   contractRegistry: ArtifactContractRegistry;
+  commands: PromptCommandDefinition[];
 }
 
 function hashPrompt(input: string) {
@@ -27,13 +29,15 @@ export async function prepareSessionRunSetup(
   workspaceRoot: string,
 ): Promise<SessionRunSetup> {
   const { provider, model } = getDefaultProviderConfig();
-  const toolRegistry = createDefaultToolRegistry();
   const skillsRoot = path.resolve(process.cwd(), "src/skills");
   const contractRegistry = await loadArtifactContracts(getDefaultContractsRoot());
-  const skills = await loadSkills(skillsRoot);
-  const skillsXml = buildSkillsXml(skills);
+  const commands = await loadCommands(skillsRoot);
+  const toolRegistry = createDefaultToolRegistry({ commands, contractRegistry });
+  const commandsXml = buildCommandsXml(
+    commands.filter((command) => command.modelInvocable),
+  );
   const systemPrompt = await buildSystemPrompt({
-    skillsXml,
+    commandsXml,
     workspaceRoot,
   });
 
@@ -45,5 +49,6 @@ export async function prepareSessionRunSetup(
     systemPromptHash: hashPrompt(systemPrompt),
     toolRegistry,
     contractRegistry,
+    commands,
   };
 }

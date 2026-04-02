@@ -144,6 +144,7 @@ function createAssistantMessage(messageId: string): UIMessage {
     parts: [],
     isStreaming: true,
     status: MESSAGE_STATUS.STREAMING,
+    invokedCommands: [],
   };
 }
 

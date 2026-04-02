@@ -1,24 +1,32 @@
-import { MESSAGE_PART_KIND, MESSAGE_ROLE } from "@/lib/constants";
+/**
+ * executeTurn —— 执行一个完整的 agent turn。
+ *
+ * 一个 turn = 一次 LLM 流式响应 + 响应中声明的工具调用执行。
+ *
+ * 职责编排（不直接处理细节）：
+ * 1. 消费 LLM 流 → 收集 contentBlocks + pendingToolCalls
+ * 2. 如果有 pendingToolCalls → 交给 tool-executor 按批次执行
+ * 3. 汇总为 TurnResult 返回给 loop 层
+ *
+ * 流消费中的 part 状态机（text/reasoning 的 start→delta→done→end）
+ * 直接在本文件处理，因为它与流式 chunk 紧密耦合。
+ *
+ * 工具执行的分区、并行/串行逻辑在 tool-executor.ts 中。
+ */
+
+import { MESSAGE_PART_KIND, MESSAGE_ROLE, MAX_RETRY_ATTEMPTS, RETRY_BASE_DELAY_MS } from "@/lib/constants";
 import { InterruptedError, isAbortError } from "@/lib/errors";
 import { genMessageId } from "@/lib/id";
 
-import { MESSAGE_PART_END_STATE, TOOL_END_STATE } from "../events/constants";
-import {
-  artifactPayloadToContentBlock,
-  buildArtifactPayload,
-  buildStructuredOutputSummary,
-} from "./artifacts";
+import { MESSAGE_PART_END_STATE } from "../events/constants";
+import { executeToolBatches, emitToolInterrupted } from "./tool-executor";
 import type {
   MessagePartEndState,
   MessagePartKind,
 } from "../events/types";
 import type { LLMContentBlock } from "../provider/base";
 import type { PendingToolCall, TurnParams, TurnResult } from "./types";
-import {
-  structuredOutputParams,
-  structuredOutputToolName,
-} from "../tools/built-in/structured-output";
-import type { ArtifactPartPayload } from "@/lib/artifact-types";
+import { streamWithRetry } from "./with-retry";
 
 type StreamPartKind =
   | typeof MESSAGE_PART_KIND.TEXT
@@ -41,12 +49,15 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
   const contentBlocks: LLMContentBlock[] = [];
   const pendingToolCalls: PendingToolCall[] = [];
   const completedTextPartIndices: number[] = [];
+  let usageData: { inputTokens: number; outputTokens: number } | undefined;
+  let stopReason: string | undefined;
 
   let currentPartKind: StreamPartKind | null = null;
   let currentPartContent = "";
   let partIndex = 0;
 
-  // 主动通知 UI 一个新的 part 开始了，这样 UI 可以更快地渲染出对应的组件（比如工具调用的组件），而不需要等到第一个 delta 到达时才知道这个 part 的存在
+  // ─── Part 状态机辅助函数 ──────────────────────────
+
   const emitPartStart = (
     kind: MessagePartKind,
     customPartIndex = partIndex,
@@ -73,11 +84,6 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
     });
   };
 
-  /**
-   * 仅限 Text 和 Reasoning 的 part 完成 flush
-   * 通知对应的事件 done 并且把对应囤积的 currentPartContent 加入 contentBlocks 中
-   * 因为完成一次具体的 part 所以 partIndex 也会增加
-   */
   const flushCurrentPart = (
     state: MessagePartEndState = MESSAGE_PART_END_STATE.COMPLETE,
   ) => {
@@ -125,12 +131,6 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
     partIndex += 1;
   };
 
-  /**
-   * 
-   * - 如果当前没有 part，就创建
-   * - 如果当前 part 类型不同，就先 flush，再创建新 part
-   * - 如果当前 part 类型相同，就继续沿用
-   */
   const ensureStreamPart = (kind: StreamPartKind) => {
     if (currentPartKind !== null && currentPartKind !== kind) {
       flushCurrentPart();
@@ -142,7 +142,6 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
     }
   };
 
-  // chunk 拼接器
   const appendToStreamPart = (kind: StreamPartKind, value: string) => {
     if (!value) {
       return;
@@ -174,55 +173,16 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
     }
   };
 
-  const interruptToolPart = (
-    toolCall: PendingToolCall,
-    durationMs = 0,
-    emitToolEnd = false,
-  ) => {
-    if (emitToolEnd) {
-      emitter.emit({
-        type: "message.tool.end",
-        messageId: msgId,
-        partIndex: toolCall.partIndex,
-        toolCallId: toolCall.id,
-        output: "Interrupted by user.",
-        error: undefined,
-        durationMs,
-        state: TOOL_END_STATE.INTERRUPTED,
-      });
-    }
-
-    emitter.emit({
-      type: "message.part.end",
-      messageId: msgId,
-      partIndex: toolCall.partIndex,
-      kind: MESSAGE_PART_KIND.TOOL,
-      state: MESSAGE_PART_END_STATE.INTERRUPTED,
-    });
-  };
-
-  const emitArtifactPart = (
-    artifact: ArtifactPartPayload,
-    artifactPartIndex: number,
-  ) => {
-    emitPartStart(MESSAGE_PART_KIND.ARTIFACT, artifactPartIndex);
-    emitter.emit({
-      type: "message.artifact",
-      messageId: msgId,
-      partIndex: artifactPartIndex,
-      artifact,
-    });
-    emitPartEnd(
-      MESSAGE_PART_KIND.ARTIFACT,
-      MESSAGE_PART_END_STATE.COMPLETE,
-      artifactPartIndex,
-    );
-    contentBlocks.push(artifactPayloadToContentBlock(artifact));
-  };
+  // ─── 主流程 ──────────────────────────────────────
 
   try {
+    // 1. 消费 LLM 流式响应
     try {
-      const stream = await provider.stream(streamParams);
+      const stream = await streamWithRetry(provider, streamParams, {
+        maxAttempts: MAX_RETRY_ATTEMPTS,
+        baseDelayMs: RETRY_BASE_DELAY_MS,
+        emitter,
+      });
       ensureNotInterrupted();
 
       for await (const chunk of stream) {
@@ -239,7 +199,6 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
 
           case "tool_use":
             flushCurrentPart();
-
             emitPartStart(MESSAGE_PART_KIND.TOOL);
 
             contentBlocks.push({
@@ -260,6 +219,10 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
             break;
 
           case "usage":
+            usageData = {
+              inputTokens: chunk.inputTokens,
+              outputTokens: chunk.outputTokens,
+            };
             break;
 
           case "text_annotations":
@@ -278,6 +241,10 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
               }
             }
             break;
+
+          case "stop":
+            stopReason = chunk.stopReason;
+            break;
         }
       }
     } catch (error) {
@@ -285,7 +252,10 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
         flushCurrentPart(MESSAGE_PART_END_STATE.INTERRUPTED);
 
         for (const toolCall of pendingToolCalls) {
-          interruptToolPart(toolCall);
+          emitToolInterrupted(
+            { emitter, msgId, interruptSignal },
+            toolCall,
+          );
         }
 
         throw new InterruptedError();
@@ -309,186 +279,30 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
     ensureNotInterrupted();
     flushCurrentPart();
 
-    const toolResultBlocks: LLMContentBlock[] = [];
-    let nextArtifactPartIndex = partIndex;
+    // 2. 执行工具调用（如有）
+    let toolResultBlocks: LLMContentBlock[] = [];
 
-    for (const [index, toolCall] of pendingToolCalls.entries()) {
-      if (interruptSignal?.aborted) {
-        for (const remainingToolCall of pendingToolCalls.slice(index)) {
-          interruptToolPart(remainingToolCall);
-        }
-        throw new InterruptedError();
-      }
+    if (pendingToolCalls.length > 0) {
+      const executionResult = await executeToolBatches(
+        {
+          emitter,
+          msgId,
+          interruptSignal,
+          toolRegistry,
+          toolContext,
+          contractRegistry,
+        },
+        pendingToolCalls,
+        partIndex, // artifact parts 从这个 index 开始
+      );
 
-      emitter.emit({
-        type: "message.tool.start",
-        messageId: msgId,
-        partIndex: toolCall.partIndex,
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        input: toolCall.input,
-      });
-
-      emitter.emit({
-        type: "message.tool.running",
-        messageId: msgId,
-        partIndex: toolCall.partIndex,
-        toolCallId: toolCall.id,
-      });
-
-      const startTime = Date.now();
-      let output = "";
-      let isError = false;
-      const producedArtifacts: ArtifactPartPayload[] = [];
-
-      ensureNotInterrupted();
-
-      if (!toolRegistry || !toolContext) {
-        output = "Tool system is not configured.";
-        isError = true;
-      } else {
-        try {
-          ensureNotInterrupted();
-          if (toolCall.name === structuredOutputToolName) {
-            if (!contractRegistry) {
-              throw new Error("Artifact contract registry is not configured.");
-            }
-
-            const parsed = structuredOutputParams.parse(toolCall.input);
-            const contract = contractRegistry.get(parsed.contract_id);
-            const currentAssistantContext = contentBlocks.filter(
-              (block) =>
-                block.type !== "tool_use" || block.id !== toolCall.id,
-            );
-            const structuredMessages =
-              currentAssistantContext.length > 0
-                ? [
-                    ...streamParams.messages,
-                    {
-                      role: MESSAGE_ROLE.ASSISTANT,
-                      content: currentAssistantContext,
-                    } as const,
-                  ]
-                : streamParams.messages;
-
-            const result = await provider.generateStructured({
-              messages: structuredMessages,
-              systemPrompt: streamParams.systemPrompt,
-              contract,
-              instruction: parsed.instruction,
-              signal: interruptSignal,
-            });
-
-            ensureNotInterrupted();
-
-            const artifact = buildArtifactPayload(contract, result, {
-              kind: "assistant",
-              name: structuredOutputToolName,
-            });
-
-            producedArtifacts.push(artifact);
-            output = buildStructuredOutputSummary(artifact);
-            isError = false;
-          } else {
-            const tool = toolRegistry.get(toolCall.name);
-            const parsed = tool.parameters.parse(toolCall.input);
-            const result = await tool.execute(parsed, toolContext);
-            ensureNotInterrupted();
-            output = result.output;
-            isError = result.isError;
-
-            for (const artifact of result.artifacts ?? []) {
-              if (artifact.contractId) {
-                if (!contractRegistry) {
-                  throw new Error(
-                    `Artifact contract registry is not configured for "${artifact.contractId}".`,
-                  );
-                }
-
-                const contract = contractRegistry.get(artifact.contractId);
-                producedArtifacts.push(
-                  buildArtifactPayload(
-                    contract,
-                    {
-                      data: artifact.data,
-                      summaryText: artifact.summaryText ?? null,
-                    },
-                    {
-                      kind: "tool",
-                      name: toolCall.name,
-                    },
-                  ),
-                );
-                continue;
-              }
-
-              producedArtifacts.push({
-                artifactType: artifact.artifactType,
-                contractId: artifact.contractId ?? null,
-                producer: {
-                  kind: "tool",
-                  name: toolCall.name,
-                },
-                data: artifact.data,
-                summaryText: artifact.summaryText ?? null,
-              });
-            }
-          }
-        } catch (error: unknown) {
-          if (interruptSignal?.aborted || isAbortError(error)) {
-            interruptToolPart(toolCall, Date.now() - startTime, true);
-
-            for (const remainingToolCall of pendingToolCalls.slice(index + 1)) {
-              interruptToolPart(remainingToolCall);
-            }
-
-            throw new InterruptedError();
-          }
-
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Unknown tool execution error";
-
-          output = `Error executing tool "${toolCall.name}": ${message}`;
-          isError = true;
-        }
-      }
-
-      emitter.emit({
-        type: "message.tool.end",
-        messageId: msgId,
-        partIndex: toolCall.partIndex,
-        toolCallId: toolCall.id,
-        output,
-        error: isError ? output : undefined,
-        durationMs: Date.now() - startTime,
-        state: isError ? TOOL_END_STATE.ERROR : TOOL_END_STATE.COMPLETE,
-      });
-
-      emitter.emit({
-        type: "message.part.end",
-        messageId: msgId,
-        partIndex: toolCall.partIndex,
-        kind: MESSAGE_PART_KIND.TOOL,
-        state: isError
-          ? MESSAGE_PART_END_STATE.ERROR
-          : MESSAGE_PART_END_STATE.COMPLETE,
-      });
-
-      for (const artifact of producedArtifacts) {
-        emitArtifactPart(artifact, nextArtifactPartIndex);
-        nextArtifactPartIndex += 1;
-      }
-
-      toolResultBlocks.push({
-        type: "tool_result",
-        toolCallId: toolCall.id,
-        content: output,
-        isError,
-      });
+      toolResultBlocks = executionResult.toolResultBlocks;
+      // artifact content blocks 已经通过 emitArtifactPart 事件通知了 UI，
+      // 同时也需要加入 contentBlocks 给上层用于历史记录
+      contentBlocks.push(...executionResult.artifactContentBlocks);
     }
 
+    // 3. 汇总返回
     return {
       assistantMessage: {
         role: MESSAGE_ROLE.ASSISTANT,
@@ -502,6 +316,8 @@ export async function executeTurn(params: TurnParams): Promise<TurnResult> {
               content: toolResultBlocks,
             }
           : undefined,
+      usage: usageData,
+      truncated: stopReason === "max_tokens",
     };
   } finally {
     emitter.emit({ type: "message.end", messageId: msgId });

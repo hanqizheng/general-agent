@@ -26,6 +26,7 @@ export const bashTool: ToolDefinition<z.infer<typeof bashParams>> = {
   description:
     "Execute a shell command in the workspace root directory and return its output (stdout + stderr). Prefer this for repo inspection, builds, tests, scripts, git commands, and other terminal operations. Relative paths are resolved from the workspace root.",
   riskLevel: "high",
+  concurrencySafe: false,
   parameters: bashParams,
 
   async execute(input, ctx) {

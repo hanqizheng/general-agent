@@ -8,7 +8,6 @@
  *  2. 拿回：一个异步可迭代的流，逐块吐出 LLM 的响应
  */
 
-import type { ArtifactContract, StructuredArtifactResult } from "@/core/contracts";
 import type { ArtifactPartPayload } from "@/lib/artifact-types";
 import type {
   AttachmentBindingSource,
@@ -70,14 +69,6 @@ export interface LLMStreamParams {
   signal?: AbortSignal;
 }
 
-export interface LLMStructuredGenerationParams {
-  messages: LLMMessage[];
-  systemPrompt: string;
-  contract: ArtifactContract;
-  instruction?: string;
-  signal?: AbortSignal;
-}
-
 /**
  * 输出
  * */
@@ -106,6 +97,18 @@ export type LLMStreamChunk =
       outputTokens: number;
     }
   | {
+      /**
+       * 流结束信号，携带停止原因。
+       *
+       * stopReason 含义：
+       * - "end_turn" / "stop" — 正常结束
+       * - "max_tokens" / "length" — 输出被截断，需要续接
+       * - "tool_use" / "tool_calls" — LLM 想调用工具（此时 tool_use chunk 已单独发出）
+       */
+      type: "stop";
+      stopReason: string;
+    }
+  | {
       type: "text_annotations";
       blocks: Array<{
         blockIndex: number;
@@ -118,7 +121,4 @@ export interface LLMProvider {
   name: string;
   /** 接收参数，返回一个异步可迭代对象。Agent Loop 用 for await (const chunk of stream) 逐块消费 */
   stream(params: LLMStreamParams): Promise<AsyncIterable<LLMStreamChunk>>;
-  generateStructured(
-    params: LLMStructuredGenerationParams,
-  ): Promise<StructuredArtifactResult>;
 }

@@ -13,6 +13,9 @@ export const DEFAULT_BASH_TIMEOUT_MS = 120_000;
 export const MAX_BASH_TIMEOUT_MS = 600_000;
 export const MAX_BASH_OUTPUT_CHARS = 30_000;
 
+// Tool execution
+export const DEFAULT_TOOL_TIMEOUT_MS = 300_000; // 5 minutes
+
 // Write
 export const MAX_WRITE_CONTENT_CHARS = 100_000;
 
@@ -77,6 +80,7 @@ export const LOOP_END_REASON = {
   INTERRUPTED: "interrupted",
   ERROR: "error",
   MAX_TURNS: "max_turns",
+  DOOM_LOOP: "doom_loop",
 } as const;
 
 /** tool 执行结束态：对应 message.tool.end.state */

@@ -4,7 +4,7 @@ import path from "path";
 let cachedBase: string | null = null;
 
 interface BuildSystemPromptOptions {
-  skillsXml?: string;
+  commandsXml?: string;
   workspaceRoot?: string;
 }
 
@@ -23,7 +23,7 @@ function injectWorkspaceContext(basePrompt: string, workspaceRoot?: string) {
 export async function buildSystemPrompt(
   options: BuildSystemPromptOptions = {},
 ): Promise<string> {
-  const { skillsXml, workspaceRoot } = options;
+  const { commandsXml, workspaceRoot } = options;
 
   if (!cachedBase) {
     const templatePath = path.resolve(
@@ -35,7 +35,7 @@ export async function buildSystemPrompt(
 
   const promptWithWorkspace = injectWorkspaceContext(cachedBase, workspaceRoot);
 
-  if (!skillsXml) return promptWithWorkspace;
+  if (!commandsXml) return promptWithWorkspace;
 
-  return `${promptWithWorkspace}\n\n${skillsXml}`;
+  return `${promptWithWorkspace}\n\n${commandsXml}`;
 }

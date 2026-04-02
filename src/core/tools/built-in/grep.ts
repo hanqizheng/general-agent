@@ -29,6 +29,7 @@ export const grepTool: ToolDefinition<z.infer<typeof grepParams>> = {
   description:
     "Search workspace file contents using a regex pattern. Returns matching lines with file path and line numbers. Use this when you know the text to search for but not the exact file.",
   riskLevel: "low",
+  concurrencySafe: true,
   parameters: grepParams,
 
   async execute(input, ctx) {

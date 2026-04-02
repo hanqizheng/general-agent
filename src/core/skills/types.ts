@@ -1,30 +1,72 @@
 import { z } from "zod";
 
-// Zod schema 验证 SKILL.md 的 YAML frontmatter
-export const SkillMetadataSchema = z.object({
+export const promptCommandNamePattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+export const PromptCommandFrontmatterSchema = z.object({
   name: z
     .string()
     .min(1)
     .max(64)
     .regex(
-      /^[a-z0-9]+(-[a-z0-9]+)*$/,
+      promptCommandNamePattern,
       "lowercase letters, numbers, hyphens only",
     ),
   description: z.string().min(1).max(1024),
+  when_to_use: z.string().trim().min(1).max(2048).optional(),
+  arguments: z.string().trim().min(1).max(1024).optional(),
+  user_invocable: z.boolean().optional(),
+  model_invocable: z.boolean().optional(),
 });
 
-export interface SkillMetadata {
-  /** Skill 名称 */
+export type PromptCommandInvocationSource = "slash" | "tool";
+
+export interface PromptCommandDefinition {
   name: string;
-  /** Skill 的描述 */
   description: string;
+  whenToUse: string;
+  usage: string | null;
+  type: "prompt";
+  userInvocable: boolean;
+  modelInvocable: boolean;
+  sourcePath: string;
+  sourceDir: string;
 }
 
-/**
- * 已加载的 Skill 条目，因为采用渐进式加载，所以 SkillEntry 中包含了 Skill 的元数据和文件路径等信息，而不直接包含工具定义等内容
- */
-export interface SkillEntry {
-  metadata: SkillMetadata;
-  filePath: string;
-  dirPath: string;
-}
+export const StoredPromptCommandInvocationSchema = z.object({
+  name: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(promptCommandNamePattern),
+  args: z.string(),
+  source: z.literal("slash"),
+  type: z.literal("prompt"),
+  expandedPrompt: z.string().min(1),
+});
+
+export type StoredPromptCommandInvocation = z.infer<
+  typeof StoredPromptCommandInvocationSchema
+>;
+
+export const PublicPromptCommandInvocationSchema =
+  StoredPromptCommandInvocationSchema.omit({
+    expandedPrompt: true,
+  });
+
+export type PublicPromptCommandInvocation = z.infer<
+  typeof PublicPromptCommandInvocationSchema
+>;
+
+export type LeadingSlashCommandParseResult =
+  | {
+      kind: "plain";
+    }
+  | {
+      kind: "error";
+      message: string;
+    }
+  | {
+      kind: "command";
+      command: PromptCommandDefinition;
+      args: string;
+    };

@@ -128,6 +128,7 @@ export function mapTranscriptMessageToUiMessage(
     parts: message.parts.map(mapTranscriptPartToUiPart),
     isStreaming: message.status === MESSAGE_STATUS.STREAMING,
     status: message.status,
+    invokedCommands: message.metadata.invokedCommands,
   };
 }
 

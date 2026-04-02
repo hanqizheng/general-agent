@@ -20,6 +20,7 @@ export const writeTool: ToolDefinition<z.infer<typeof writeParams>> = {
   description:
     "Write content to a workspace file. Creates the file if it does not exist, overwrites if it does, and automatically creates parent directories as needed.",
   riskLevel: "medium",
+  concurrencySafe: false,
   parameters: writeParams,
 
   async execute(input, ctx) {

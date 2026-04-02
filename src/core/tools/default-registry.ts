@@ -4,13 +4,23 @@ import { editTool } from "./built-in/edit";
 import { globTool } from "./built-in/glob";
 import { grepTool } from "./built-in/grep";
 import { readTool } from "./built-in/read";
+import { createSkillTool } from "./built-in/skill";
 import { createWebSearchTool } from "./built-in/web-search";
 import { writeTool } from "./built-in/write";
-import { structuredOutputTool } from "./built-in/structured-output";
+import { createStructuredOutputTool } from "./built-in/structured-output";
 
+import type { ArtifactContractRegistry } from "@/core/contracts";
+import type { PromptCommandDefinition } from "@/core/skills";
 import { env } from "@/lib/config";
 
-export function createDefaultToolRegistry() {
+interface CreateDefaultToolRegistryOptions {
+  commands?: PromptCommandDefinition[];
+  contractRegistry?: ArtifactContractRegistry;
+}
+
+export function createDefaultToolRegistry(
+  options: CreateDefaultToolRegistryOptions = {},
+) {
   const toolRegistry = new ToolRegistry();
   toolRegistry.register(readTool);
   toolRegistry.register(writeTool);
@@ -18,7 +28,14 @@ export function createDefaultToolRegistry() {
   toolRegistry.register(bashTool);
   toolRegistry.register(grepTool);
   toolRegistry.register(globTool);
-  toolRegistry.register(structuredOutputTool);
+
+  if (options.contractRegistry && options.contractRegistry.list().length > 0) {
+    toolRegistry.register(createStructuredOutputTool(options.contractRegistry));
+  }
+
+  if (options.commands?.some((command) => command.modelInvocable)) {
+    toolRegistry.register(createSkillTool(options.commands));
+  }
 
   if (env.GEMINI_API_KEY) {
     toolRegistry.register(

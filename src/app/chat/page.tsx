@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { InputArea } from "@/components/chat/input-area";
@@ -23,16 +23,37 @@ export default function ChatPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const sessionPromiseRef = useRef<Promise<string> | null>(null);
+  const draftSessionIdRef = useRef<string | null>(null);
+  const retainedDraftSessionRef = useRef(false);
+
+  useEffect(() => {
+    draftSessionIdRef.current = draftSessionId;
+  }, [draftSessionId]);
+
+  useEffect(() => {
+    return () => {
+      const orphanedDraftSessionId = draftSessionIdRef.current;
+      if (!orphanedDraftSessionId || retainedDraftSessionRef.current) {
+        return;
+      }
+
+      void fetch(`/api/sessions/${orphanedDraftSessionId}`, {
+        method: "DELETE",
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+  }, []);
 
   const ensureSessionId = useCallback(async () => {
-    if (draftSessionId) {
-      return draftSessionId;
+    if (draftSessionIdRef.current) {
+      return draftSessionIdRef.current;
     }
 
     if (!sessionPromiseRef.current) {
       sessionPromiseRef.current = createSession()
         .then((session) => {
-          setDraftSessionId(session.id);
+          draftSessionIdRef.current = session.id;
+          setDraftSessionId((current) => current ?? session.id);
           return session.id;
         })
         .finally(() => {
@@ -40,13 +61,16 @@ export default function ChatPage() {
         });
     }
 
-    return sessionPromiseRef.current;
-  }, [createSession, draftSessionId]);
+    const sessionId = await sessionPromiseRef.current;
+    draftSessionIdRef.current = sessionId;
+    return sessionId;
+  }, [createSession]);
 
   const handleSend = async (input: SendMessageInput) => {
     setIsSubmitting(true);
     try {
       const sessionId = await ensureSessionId();
+      retainedDraftSessionRef.current = true;
       writePendingMessage(sessionId, input);
       router.push(`/chat/${sessionId}`);
     } catch {
